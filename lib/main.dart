@@ -7,6 +7,7 @@ import 'screens/register_screen.dart';
 import 'screens/monitoring_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/notif_screen.dart';
+import 'screens/main_navigation.dart';
 
 void main() {
   runApp(const MyApp());
@@ -31,7 +32,7 @@ class MyApp extends StatelessWidget {
         AppRoutes.splash: (context) => const SplashScreen(),
         AppRoutes.login: (context) => const LoginScreen(),
         AppRoutes.register: (context) => const RegisterScreen(),
-        AppRoutes.monitoring: (context) => const MonitoringScreen(),
+        AppRoutes.monitoring: (context) => const MainNavigation(),
         AppRoutes.onboarding: (context) => const OnboardingScreen(),
         AppRoutes.notification: (context) => const NotificationScreen(),
       },
