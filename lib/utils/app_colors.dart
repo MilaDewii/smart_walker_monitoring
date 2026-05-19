@@ -12,5 +12,6 @@ class AppColors {
   // Warna status
   static const Color statusGreen = Color(0xFF22C55E);   // aman
   static const Color statusYellow = Color(0xFFF59E0B);  // peringatan
-  static const Color statusRed = Color(0xFFEF4444);     // bahaya
+  static const Color statusRed = Color(0xFFEF4444);
+       // bahaya
 }
