@@ -157,24 +157,38 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      color: const Color(0xFFF0F4F8), // ← abu terang, bukan biru
+      color: const Color(0xFFF0F4F8),
       child: Column(
         children: [
           Row(
             children: [
-              // Logo Guardian
-              SvgPicture.asset(
-                'assets/images/Guardian.svg',
-                width: 40,
-                height: 40,
+              // Foto profil - bisa diklik ke profile screen
+              GestureDetector(
+                onTap: () {
+                  // TODO: nanti arahkan ke profile_screen.dart
+                  // Navigator.pushNamed(context, AppRoutes.profile);
+                },
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                  child: Text(
+                    'M', // ← nanti diganti dinamis dari data user
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
+              // Teks hallo + monitoring lansia
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Hallo, Mia',
+                      'Hallo, Mila',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textGrey,
@@ -191,12 +205,12 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   ],
                 ),
               ),
-              // Tombol notifikasi — biru solid sesuai desain
+              // Tombol notifikasi biru
               Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primary, // ← biru solid
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: IconButton(

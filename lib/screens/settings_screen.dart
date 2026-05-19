@@ -36,7 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final bool _sim808Status = false;
 
   // ── 7. EMERGENCY CONTACT ─────────────────────────────
-  String _emergencyName = 'Budi Santoso';
+  String _emergencyName = 'Mila Dewi';
   String _emergencyPhone = '+62 812 3456 7890';
   String _emergencyRelation = 'Anak';
 
@@ -93,15 +93,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       color: const Color(0xFFF0F4F8),
       child: Row(
         children: [
-          SvgPicture.asset('assets/images/Guardian.svg', width: 40, height: 40),
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: AppColors.primary.withOpacity(0.15),
+            child: Text(
+              _emergencyName.isNotEmpty ? _emergencyName[0].toUpperCase() : '?',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Guardian',
-                    style:
-                        TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                Text(
+                  'Hallo, $_emergencyName',
+                  style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+                ),
                 Text(
                   'Pengaturan',
                   style: TextStyle(
@@ -152,7 +164,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: AppColors.statusGreen.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.radar, color: AppColors.statusGreen, size: 24),
+                child:
+                    Icon(Icons.radar, color: AppColors.statusGreen, size: 24),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -160,8 +173,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Safe Radius',
-                        style: TextStyle(
-                            fontSize: 13, color: AppColors.textGrey)),
+                        style:
+                            TextStyle(fontSize: 13, color: AppColors.textGrey)),
                     Text(
                       '${_safeRadius.toInt()} meter',
                       style: TextStyle(
@@ -188,8 +201,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        vertical: 10, horizontal: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                     suffixText: 'm',
                     suffixStyle:
                         TextStyle(fontSize: 11, color: AppColors.textGrey),
@@ -226,11 +239,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('10 m',
-                  style:
-                      TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                  style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
               Text('500 m',
-                  style:
-                      TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                  style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
             ],
           ),
           const SizedBox(height: 12),
@@ -333,14 +344,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline,
-                    color: AppColors.primary, size: 16),
+                Icon(Icons.info_outline, color: AppColors.primary, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Warning < Danger. Sensor akan trigger alert bila nilai melebihi threshold.',
-                    style: TextStyle(
-                        fontSize: 11, color: AppColors.textGrey),
+                    style: TextStyle(fontSize: 11, color: AppColors.textGrey),
                   ),
                 ),
               ],
@@ -375,8 +384,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: AppColors.textDark)),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(8),
@@ -384,9 +392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Text(
                 value.toStringAsFixed(2),
                 style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: color),
+                    fontSize: 14, fontWeight: FontWeight.bold, color: color),
               ),
             ),
           ],
@@ -418,8 +424,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle(
-              'Sensor Calibration', Icons.settings_input_antenna, AppColors.primary),
+          _buildSectionTitle('Sensor Calibration', Icons.settings_input_antenna,
+              AppColors.primary),
           const SizedBox(height: 4),
           Text('Kalibrasi sensor sebelum digunakan',
               style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
@@ -510,8 +516,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.w600,
                         color: AppColors.textDark)),
                 Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 11, color: AppColors.textGrey)),
+                    style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
               ],
             ),
           ),
@@ -533,8 +538,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
                     elevation: 0,
@@ -568,8 +573,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           );
         });
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -583,8 +588,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: AppColors.textDark)),
               const SizedBox(height: 6),
               Text('Harap jangan gerakkan perangkat',
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.textGrey)),
+                  style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
               const SizedBox(height: 8),
             ],
           ),
@@ -599,8 +603,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle(
-              'Notifikasi & Suara', Icons.notifications_active_outlined, AppColors.statusYellow),
+          _buildSectionTitle('Notifikasi & Suara',
+              Icons.notifications_active_outlined, AppColors.statusYellow),
           const SizedBox(height: 12),
           // Alert Sound toggle
           _buildToggleRow(
@@ -728,8 +732,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.w600,
                         color: AppColors.textDark)),
                 Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 11, color: AppColors.textGrey)),
+                    style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
               ],
             ),
           ),
@@ -788,8 +791,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           fontWeight: FontWeight.bold)),
                   SizedBox(height: 2),
                   Text('Scan QR untuk menghubungkan walker baru',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 12)),
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ],
               ),
             ),
@@ -804,8 +806,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Icon(Icons.qr_code_scanner, color: AppColors.primary),
@@ -832,8 +833,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Icon(Icons.qr_code_2, size: 80, color: AppColors.primary),
                   const SizedBox(height: 8),
                   Text('Arahkan ke QR Walker',
-                      style: TextStyle(
-                          fontSize: 12, color: AppColors.textGrey)),
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.textGrey)),
                 ],
               ),
             ),
@@ -848,8 +849,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child:
-                Text('Batal', style: TextStyle(color: AppColors.textGrey)),
+            child: Text('Batal', style: TextStyle(color: AppColors.textGrey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx),
@@ -858,8 +858,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
             ),
-            child:
-                const Text('Scan', style: TextStyle(color: Colors.white)),
+            child: const Text('Scan', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -981,14 +980,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.w600,
                         color: AppColors.textDark)),
                 Text(detail,
-                    style: TextStyle(
-                        fontSize: 11, color: AppColors.textGrey)),
+                    style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
               ],
             ),
           ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: isActive
                   ? AppColors.statusGreen.withOpacity(0.12)
@@ -1014,8 +1011,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle(
-              'Emergency Contact', Icons.contact_phone_outlined, AppColors.statusRed),
+          _buildSectionTitle('Emergency Contact', Icons.contact_phone_outlined,
+              AppColors.statusRed),
           const SizedBox(height: 4),
           Text('Kontak yang dihubungi saat bahaya',
               style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
@@ -1026,22 +1023,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: BoxDecoration(
               color: AppColors.statusRed.withOpacity(0.05),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: AppColors.statusRed.withOpacity(0.2)),
+              border: Border.all(color: AppColors.statusRed.withOpacity(0.2)),
             ),
             child: Row(
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: AppColors.statusRed.withOpacity(0.15),
+                  backgroundColor: AppColors.primary.withOpacity(0.15),
                   child: Text(
                     _emergencyName.isNotEmpty
                         ? _emergencyName[0].toUpperCase()
                         : '?',
                     style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.statusRed),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1058,8 +1055,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Text(
                         '$_emergencyRelation  •  $_emergencyPhone',
-                        style: TextStyle(
-                            fontSize: 12, color: AppColors.textGrey),
+                        style:
+                            TextStyle(fontSize: 12, color: AppColors.textGrey),
                       ),
                     ],
                   ),
@@ -1088,8 +1085,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content:
-                        Text('Simulasi panggilan ke $_emergencyPhone...'),
+                    content: Text('Simulasi panggilan ke $_emergencyPhone...'),
                     backgroundColor: AppColors.primary,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
@@ -1108,8 +1104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
-                side: BorderSide(
-                    color: AppColors.statusRed.withOpacity(0.4)),
+                side: BorderSide(color: AppColors.statusRed.withOpacity(0.4)),
               ),
             ),
           ),
@@ -1141,8 +1136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.contact_phone_outlined,
-                    color: AppColors.statusRed),
+                Icon(Icons.contact_phone_outlined, color: AppColors.statusRed),
                 const SizedBox(width: 8),
                 Text('Edit Emergency Contact',
                     style: TextStyle(
@@ -1157,7 +1151,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildContactField(phoneCtrl, Icons.phone_outlined, 'Nomor HP',
                 type: TextInputType.phone),
             const SizedBox(height: 12),
-            _buildContactField(relCtrl, Icons.people_outline, 'Hubungan (misal: Anak, Istri)'),
+            _buildContactField(
+                relCtrl, Icons.people_outline, 'Hubungan (misal: Anak, Istri)'),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
