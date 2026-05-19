@@ -43,21 +43,21 @@ class AlertItem {
 // COLORS — semua bersumber dari AppColors
 // ============================================================
 class _C {
-  static const Color primary      = AppColors.primary;    // #1E3A8A biru tua
-  static const Color secondary    = AppColors.secondary;  // #3B82F6 biru muda
+  static const Color primary = AppColors.primary; // #1E3A8A biru tua
+  static const Color secondary = AppColors.secondary; // #3B82F6 biru muda
   static const Color primaryLight = Color(0xFFDBEAFE);
-  static const Color bgPage       = Color(0xFFE8F0FB);    // latar biru sangat muda
-  static const Color white        = AppColors.white;
-  static const Color textDark     = AppColors.textDark;
-  static const Color textMid      = AppColors.textGrey;
+  static const Color bgPage = Color(0xFFE8F0FB); // latar biru sangat muda
+  static const Color white = AppColors.white;
+  static const Color textDark = AppColors.textDark;
+  static const Color textMid = AppColors.textGrey;
 
-  static const Color tinggiText  = AppColors.statusRed;
-  static const Color tinggiBg    = Color(0xFFFEE2E2);
+  static const Color tinggiText = AppColors.statusRed;
+  static const Color tinggiBg = Color(0xFFFEE2E2);
   static const Color daruratText = AppColors.statusYellow;
-  static const Color daruratBg   = Color(0xFFFFF3CD);
+  static const Color daruratBg = Color(0xFFFFF3CD);
   static const Color waspadaText = AppColors.statusGreen;
-  static const Color waspadaBg   = Color(0xFFDCFCE7);
-  static const Color unreadDot   = AppColors.statusRed;
+  static const Color waspadaBg = Color(0xFFDCFCE7);
+  static const Color unreadDot = AppColors.statusRed;
 }
 
 // ============================================================
@@ -369,8 +369,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 style: const TextStyle(fontSize: 10, color: _C.textDark),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
-            Text(sub,
-                style: const TextStyle(fontSize: 9, color: _C.textMid)),
+            Text(sub, style: const TextStyle(fontSize: 9, color: _C.textMid)),
           ],
         ),
       ),
@@ -422,8 +421,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         children: [
           Icon(Icons.calendar_today_rounded, size: 12, color: _C.textMid),
           SizedBox(width: 4),
-          Text('Hari ini',
-              style: TextStyle(fontSize: 11, color: _C.textMid)),
+          Text('Hari ini', style: TextStyle(fontSize: 11, color: _C.textMid)),
           SizedBox(width: 2),
           Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: _C.textMid),
         ],
@@ -512,15 +510,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 ),
                 const SizedBox(width: 6),
                 Text(item.time.split(' ').first,
-                    style:
-                        const TextStyle(fontSize: 10, color: _C.textMid)),
+                    style: const TextStyle(fontSize: 10, color: _C.textMid)),
                 const SizedBox(width: 4),
                 Container(
                   width: 7,
                   height: 7,
                   decoration: BoxDecoration(
-                    color:
-                        item.sudahDibaca ? Colors.transparent : _C.unreadDot,
+                    color: item.sudahDibaca ? Colors.transparent : _C.unreadDot,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -528,8 +524,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
             ),
             const SizedBox(height: 6),
             Text(item.description,
-                style:
-                    const TextStyle(fontSize: 12, color: _C.textDark)),
+                style: const TextStyle(fontSize: 12, color: _C.textDark)),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -554,8 +549,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: Text(text,
-          style: const TextStyle(fontSize: 10, color: _C.textMid)),
+      child:
+          Text(text, style: const TextStyle(fontSize: 10, color: _C.textMid)),
     );
   }
 
@@ -657,15 +652,15 @@ class NotificationDetailScreen extends StatelessWidget {
                     // ── Alert Card ──
                     _buildAlertCard(ld),
                     const SizedBox(height: 14),
-                    // ── Ringkasan Kejadian ──
-                    _buildSectionTitle('Ringkasan Kejadian'),
-                    const SizedBox(height: 8),
-                    _buildRingkasan(),
-                    const SizedBox(height: 14),
                     // ── Lokasi Lansia ──
                     _buildSectionTitle('Lokasi Lansia'),
                     const SizedBox(height: 8),
                     _buildMapCard(context),
+                    const SizedBox(height: 14),
+                    // ── Ringkasan Kejadian ──
+                    _buildSectionTitle('Ringkasan Kejadian'),
+                    const SizedBox(height: 8),
+                    _buildRingkasan(),
                     const SizedBox(height: 14),
                     // ── Grafik Aktivitas ──
                     _buildSectionTitle('Grafik Aktivitas'),
@@ -694,7 +689,8 @@ class NotificationDetailScreen extends StatelessWidget {
               CircleAvatar(
                 radius: 22,
                 backgroundColor: _C.primary.withOpacity(0.12),
-                child: const Icon(Icons.person_rounded, color: _C.primary, size: 26),
+                child: const Icon(Icons.person_rounded,
+                    color: _C.primary, size: 26),
               ),
               const SizedBox(width: 10),
               const Column(
@@ -737,9 +733,7 @@ class NotificationDetailScreen extends StatelessWidget {
   Widget _buildSectionTitle(String title) {
     return Text(title,
         style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: _C.textDark));
+            fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark));
   }
 
   // ── Alert Card ───────────────────────────────────────────
@@ -759,8 +753,7 @@ class NotificationDetailScreen extends StatelessWidget {
         children: [
           // Blue header bar
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: const BoxDecoration(
               color: _C.primary,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -812,8 +805,8 @@ class NotificationDetailScreen extends StatelessWidget {
                         color: ld['bg'] as Color,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(item.icon,
-                          size: 20, color: ld['text'] as Color),
+                      child:
+                          Icon(item.icon, size: 20, color: ld['text'] as Color),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -840,14 +833,13 @@ class NotificationDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(item.description,
-                    style: const TextStyle(
-                        fontSize: 12, color: _C.textDark)),
+                    style: const TextStyle(fontSize: 12, color: _C.textDark)),
                 const SizedBox(height: 6),
                 Row(
                   children: [
                     Text('${item.time}   ${item.date}',
-                        style: const TextStyle(
-                            fontSize: 10, color: _C.textMid)),
+                        style:
+                            const TextStyle(fontSize: 10, color: _C.textMid)),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -863,9 +855,7 @@ class NotificationDetailScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: item.sudahDibaca
-                              ? _C.waspadaText
-                              : _C.textMid,
+                          color: item.sudahDibaca ? _C.waspadaText : _C.textMid,
                         ),
                       ),
                     ),
@@ -943,9 +933,7 @@ class NotificationDetailScreen extends StatelessWidget {
             child: Icon(icon, size: 18, color: iconColor),
           ),
           const SizedBox(height: 6),
-          Text(label,
-              style:
-                  const TextStyle(fontSize: 10, color: _C.textMid)),
+          Text(label, style: const TextStyle(fontSize: 10, color: _C.textMid)),
           const SizedBox(height: 2),
           Text(value,
               style: const TextStyle(
@@ -983,8 +971,7 @@ class NotificationDetailScreen extends StatelessWidget {
         children: [
           // Map
           ClipRRect(
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(16)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: SizedBox(
               height: 200,
               child: Stack(
@@ -1053,8 +1040,7 @@ class NotificationDetailScreen extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: AppColors.white.withOpacity(0.9),
                           borderRadius: BorderRadius.circular(20),
-                          border:
-                              Border.all(color: _C.waspadaText, width: 1),
+                          border: Border.all(color: _C.waspadaText, width: 1),
                         ),
                         child: const Text('Area Aman',
                             style: TextStyle(
@@ -1080,8 +1066,8 @@ class NotificationDetailScreen extends StatelessWidget {
                     'Longitude : ${item.location.longitude.toStringAsFixed(4)}'),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: _C.waspadaBg,
                     borderRadius: BorderRadius.circular(8),
@@ -1105,8 +1091,8 @@ class NotificationDetailScreen extends StatelessWidget {
                 onPressed: () {},
                 icon: const Icon(Icons.location_on_rounded, size: 18),
                 label: const Text('Lihat Lokasi',
-                    style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _C.primary,
                   foregroundColor: AppColors.white,
@@ -1129,8 +1115,7 @@ class NotificationDetailScreen extends StatelessWidget {
         color: const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(text,
-          style: const TextStyle(fontSize: 9, color: _C.textMid)),
+      child: Text(text, style: const TextStyle(fontSize: 9, color: _C.textMid)),
     );
   }
 
@@ -1189,8 +1174,7 @@ class NotificationDetailScreen extends StatelessWidget {
           const SizedBox(height: 10),
           // Anomaly label
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: _C.tinggiBg,
               borderRadius: BorderRadius.circular(8),
@@ -1290,8 +1274,8 @@ class _ActivityChartPainter extends CustomPainter {
       ..color = AppColors.statusRed
       ..strokeWidth = 1.5;
     final midAnomaly = (anomalyStart + anomalyEnd) / 2;
-    canvas.drawLine(Offset(midAnomaly, 0), Offset(midAnomaly, h),
-        anomalyLinePaint);
+    canvas.drawLine(
+        Offset(midAnomaly, 0), Offset(midAnomaly, h), anomalyLinePaint);
 
     // Draw path helper
     void drawPath(List<double> data, Color color) {
@@ -1325,8 +1309,7 @@ class _ActivityChartPainter extends CustomPainter {
     for (final label in ['1.2', '0.9', '0.6', '0.3', '0']) {
       final idx = ['1.2', '0.9', '0.6', '0.3', '0'].indexOf(label);
       tp.text = TextSpan(
-          text: label,
-          style: const TextStyle(fontSize: 8, color: _C.textMid));
+          text: label, style: const TextStyle(fontSize: 8, color: _C.textMid));
       tp.layout();
       tp.paint(canvas, Offset(0, h * idx / 4 + 1));
     }

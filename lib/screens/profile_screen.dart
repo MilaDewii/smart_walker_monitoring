@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import '../utils/app_colors.dart';
 
@@ -12,7 +11,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // ── MODE EDIT ──
   bool _isEditing = false;
 
   // ── DATA USER ──
@@ -22,10 +20,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final String _role = 'Caregiver / User';
   File? _fotoFile;
 
-  // Controllers untuk mode edit
   late TextEditingController _namaCtrl;
   late TextEditingController _emailCtrl;
   late TextEditingController _noHpCtrl;
+
+  // ── DATA LANSIA ──
+  String _namaLansia = 'Siti Aminah';
+  String _umurLansia = '74';
+  String _jenisKelaminLansia = 'Perempuan';
 
   // ── DATA DEVICE WALKER ──
   final String _walkerId = 'GW-001';
@@ -58,7 +60,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  // ── TOGGLE EDIT / SIMPAN ──────────────────────────────
   void _toggleEdit() {
     if (_isEditing) {
       setState(() {
@@ -72,7 +73,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           content: const Text('Profil berhasil disimpan!'),
           backgroundColor: AppColors.statusGreen,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     } else {
@@ -94,7 +96,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  // ── GANTI FOTO ───────────────────────────────────────
   Future<void> _pilihFoto(ImageSource source) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: source, imageQuality: 80);
@@ -114,13 +115,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Ganti Foto Profil',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark),
-              ),
+              Text('Ganti Foto Profil',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark)),
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -253,7 +252,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       color: const Color(0xFFF0F4F8),
       child: Row(
         children: [
-          SvgPicture.asset('assets/images/Guardian.svg', width: 40, height: 40),
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: AppColors.primary.withOpacity(0.15),
+            backgroundImage: _fotoFile != null ? FileImage(_fotoFile!) : null,
+            child: _fotoFile == null
+                ? Text(
+                    _namaLengkap.isNotEmpty
+                        ? _namaLengkap[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : null,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -261,13 +276,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Text('Hallo, $_namaLengkap',
                     style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-                Text(
-                  'Profil Saya',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textDark),
-                ),
+                Text('Profil Saya',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark)),
               ],
             ),
           ),
@@ -290,13 +303,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── 1. FOTO & NAMA ───────────────────────────────────
+  // ── FOTO & NAMA ──────────────────────────────────────
   Widget _buildFotoNama() {
     return _buildCard(
       child: Column(
         children: [
+          // Klik foto → langsung kamera
           GestureDetector(
-            onTap: _showPilihFotoSheet,
+            onTap: () => _pilihFoto(ImageSource.camera),
             child: Stack(
               alignment: Alignment.bottomRight,
               children: [
@@ -306,7 +320,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   backgroundImage:
                       _fotoFile != null ? FileImage(_fotoFile!) : null,
                   child: _fotoFile == null
-                      ? Icon(Icons.person, size: 52, color: AppColors.primary)
+                      ? Text(
+                          _namaLengkap.isNotEmpty
+                              ? _namaLengkap[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        )
                       : null,
                 ),
                 Container(
@@ -323,16 +346,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          TextButton(
+          const SizedBox(height: 4),
+
+          // Klik "Ganti Foto" → pilihan kamera atau galeri
+          TextButton.icon(
             onPressed: _showPilihFotoSheet,
-            child: Text(
+            icon: Icon(Icons.photo_library_outlined,
+                size: 16, color: AppColors.primary),
+            label: Text(
               'Ganti Foto',
               style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600),
+                fontSize: 12,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
+
+          // Nama
           _isEditing
               ? Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -374,7 +405,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── 2. INFORMASI AKUN ────────────────────────────────
+  // ── INFORMASI AKUN ───────────────────────────────────
   Widget _buildInfoAkun() {
     return _buildCard(
       child: Column(
@@ -402,14 +433,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 12),
+
+          // Nama
           _isEditing
               ? _buildEditField(
                   controller: _namaCtrl,
                   icon: Icons.badge_outlined,
                   hint: 'Nama Lengkap',
                 )
-              : _buildInfoRow(Icons.badge_outlined, 'Nama Lengkap', _namaLengkap),
+              : _buildInfoRow(
+                  Icons.badge_outlined, 'Nama Lengkap', _namaLengkap),
           _buildDivider(),
+
+          // Email
           _isEditing
               ? Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -422,6 +458,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 )
               : _buildInfoRow(Icons.email_outlined, 'Email', _email),
           _buildDivider(),
+
+          // Nomor HP
           _isEditing
               ? Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -434,6 +472,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 )
               : _buildInfoRow(Icons.phone_outlined, 'Nomor HP', _noHp),
           _buildDivider(),
+
+          // Password
           InkWell(
             onTap: () => _showUbahPassword(context),
             borderRadius: BorderRadius.circular(8),
@@ -445,8 +485,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text('Password',
-                        style: TextStyle(
-                            fontSize: 13, color: AppColors.textGrey)),
+                        style:
+                            TextStyle(fontSize: 13, color: AppColors.textGrey)),
                   ),
                   Text('Ubah Password',
                       style: TextStyle(
@@ -459,102 +499,142 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
+          _buildDivider(),
+
+          // ── DATA LANSIA ──
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 8),
+            child: Row(
+              children: [
+                Icon(Icons.elderly, color: AppColors.primary, size: 18),
+                const SizedBox(width: 8),
+                Text('Data Lansia',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark)),
+              ],
+            ),
+          ),
+          _buildInfoRow(Icons.person_outline, 'Nama Lansia', _namaLansia),
+          _buildDivider(),
+          _buildInfoRow(Icons.cake_outlined, 'Umur', '$_umurLansia tahun'),
+          _buildDivider(),
+          _buildInfoRow(
+            _jenisKelaminLansia == 'Laki-laki' ? Icons.male : Icons.female,
+            'Jenis Kelamin',
+            _jenisKelaminLansia,
+          ),
         ],
       ),
     );
   }
 
-  // ── 3. INFORMASI DEVICE WALKER ───────────────────────
+  // ── INFORMASI DEVICE WALKER ──────────────────────────
   Widget _buildInfoWalker() {
     final bool isConnected = _statusDevice == 'Connected';
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Device Walker', Icons.bluetooth_connected),
+          _buildSectionTitle('Device Walker', Icons.directions_walk),
           const SizedBox(height: 12),
+
+          // Walker ID
           _buildInfoRow(Icons.qr_code_2, 'Walker ID', _walkerId),
           _buildDivider(),
-          Row(
-            children: [
-              Icon(Icons.wifi_tethering, color: AppColors.textGrey, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text('Status Device',
-                    style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (isConnected
-                              ? AppColors.statusGreen
-                              : AppColors.statusRed)
-                          .withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
+
+          // Status Device
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.wifi_tethering, color: AppColors.textGrey, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Status Device',
+                      style:
+                          TextStyle(fontSize: 13, color: AppColors.textGrey)),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isConnected
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (isConnected
                             ? AppColors.statusGreen
-                            : AppColors.statusRed,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _statusDevice,
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                            : AppColors.statusRed)
+                        .withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
                           color: isConnected
                               ? AppColors.statusGreen
-                              : AppColors.statusRed),
-                    ),
-                  ],
+                              : AppColors.statusRed,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(_statusDevice,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isConnected
+                                  ? AppColors.statusGreen
+                                  : AppColors.statusRed)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           _buildDivider(),
-          Row(
-            children: [
-              Icon(Icons.battery_charging_full,
-                  color: _batteryColor(_battery), size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text('Battery',
-                    style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
-              ),
-              SizedBox(
-                width: 80,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('$_battery%',
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _batteryColor(_battery))),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: _battery / 100,
-                        minHeight: 6,
-                        backgroundColor: Colors.grey.shade200,
-                        color: _batteryColor(_battery),
+
+          // Battery
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.battery_charging_full,
+                    color: _batteryColor(_battery), size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Battery',
+                              style: TextStyle(
+                                  fontSize: 13, color: AppColors.textGrey)),
+                          Text('$_battery%',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _batteryColor(_battery))),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: _battery / 100,
+                          minHeight: 6,
+                          backgroundColor: Colors.grey.shade200,
+                          color: _batteryColor(_battery),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -567,7 +647,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return AppColors.statusRed;
   }
 
-  // ── 4. PAIRING DEVICE ────────────────────────────────
+  // ── PAIRING DEVICE ───────────────────────────────────
   Widget _buildPairingDevice() {
     return InkWell(
       onTap: () => _showPairingDialog(context),
@@ -602,10 +682,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Colors.white, size: 28),
             ),
             const SizedBox(width: 16),
-            Expanded(
+            const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text('Pair Device',
                       style: TextStyle(
                           color: Colors.white,
@@ -624,7 +704,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── 5. STATUS KONEKSI ────────────────────────────────
+  // ── STATUS KONEKSI ───────────────────────────────────
   Widget _buildStatusKoneksi() {
     return _buildCard(
       child: Column(
@@ -671,9 +751,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: aktif
-                        ? AppColors.statusGreen
-                        : AppColors.statusRed)),
+                    color:
+                        aktif ? AppColors.statusGreen : AppColors.statusRed)),
             Text(aktif ? 'Aktif' : 'Nonaktif',
                 style: TextStyle(fontSize: 10, color: AppColors.textGrey)),
           ],
@@ -682,7 +761,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── 6. STATISTIK MONITORING ──────────────────────────
+  // ── STATISTIK MONITORING ─────────────────────────────
   Widget _buildInfoMonitoring() {
     return _buildCard(
       child: Column(
@@ -726,54 +805,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildStatDivider() =>
       Container(width: 1, height: 40, color: Colors.grey.shade200);
 
-  // ── 7 & 8. EDIT PROFILE + LOGOUT ─────────────────────
+  // ── TOMBOL EDIT & LOGOUT ─────────────────────────────
   Widget _buildTombolEditLogout() {
     return Column(
       children: [
-        // Edit / Simpan toggle
-        SizedBox(
+        // Edit / Simpan dengan gradient
+        Container(
           width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: _isEditing
+                  ? [
+                      AppColors.statusGreen,
+                      AppColors.statusGreen.withOpacity(0.8)
+                    ]
+                  : [AppColors.primary, AppColors.primary.withOpacity(0.8)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: (_isEditing ? AppColors.statusGreen : AppColors.primary)
+                    .withOpacity(0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: ElevatedButton.icon(
             onPressed: _toggleEdit,
             icon: Icon(
-                _isEditing ? Icons.save_outlined : Icons.edit_outlined,
-                size: 18),
+              _isEditing ? Icons.save_rounded : Icons.edit_rounded,
+              size: 20,
+              color: Colors.white,
+            ),
             label: Text(
               _isEditing ? 'Simpan Perubahan' : 'Edit Profile',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: Colors.white,
+                letterSpacing: 0.3,
+              ),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  _isEditing ? AppColors.statusGreen : AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              elevation: 0,
+                  borderRadius: BorderRadius.circular(14)),
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        // Logout — solid merah penuh (bukan outline)
-        SizedBox(
+        const SizedBox(height: 12),
+
+        // Logout outlined elegan
+        Container(
           width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.statusRed.withOpacity(0.4),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
           child: ElevatedButton.icon(
             onPressed: () => _showLogoutConfirm(context),
-            icon: const Icon(Icons.logout, size: 18, color: Colors.white),
-            label: const Text(
-              'Logout',
+            icon: Icon(Icons.logout_rounded,
+                size: 20, color: AppColors.statusRed),
+            label: Text(
+              'Keluar Akun',
               style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  color: Colors.white),
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: AppColors.statusRed,
+                letterSpacing: 0.3,
+              ),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.statusRed,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              elevation: 0,
+                  borderRadius: BorderRadius.circular(14)),
             ),
           ),
         ),
@@ -871,8 +994,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Icon(Icons.qr_code_scanner, color: AppColors.primary),
@@ -899,8 +1021,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Icon(Icons.qr_code_2, size: 80, color: AppColors.primary),
                   const SizedBox(height: 8),
                   Text('Arahkan ke QR Walker',
-                      style: TextStyle(
-                          fontSize: 12, color: AppColors.textGrey)),
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.textGrey)),
                 ],
               ),
             ),
@@ -915,8 +1037,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Batal',
-                style: TextStyle(color: AppColors.textGrey)),
+            child: Text('Batal', style: TextStyle(color: AppColors.textGrey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx),
@@ -925,8 +1046,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Scan',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('Scan', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -937,13 +1057,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Icon(Icons.logout, color: AppColors.statusRed),
             const SizedBox(width: 8),
-            const Text('Logout', style: TextStyle(fontSize: 16)),
+            const Text('Keluar Akun', style: TextStyle(fontSize: 16)),
           ],
         ),
         content: const Text(
@@ -965,15 +1084,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Logout',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('Keluar', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
   }
 
-  // ── EDIT FIELD ────────────────────────────────────────
+  // ── HELPERS ───────────────────────────────────────────
   Widget _buildEditField({
     required TextEditingController controller,
     required IconData icon,
@@ -1015,7 +1133,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── HELPERS ───────────────────────────────────────────
   Widget _buildCard({required Widget child}) {
     return Container(
       width: double.infinity,
