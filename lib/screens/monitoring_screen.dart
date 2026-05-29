@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/app_colors.dart';
+import '../utils/app_routes.dart';
 
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
@@ -195,7 +196,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                       ),
                     ),
                     Text(
-                      'Monitoring Lansia',
+                      'Monitoring $_namaLansia',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -220,7 +221,9 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                     color: Colors.white,
                     size: 22,
                   ),
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.pushNamed(context, AppRoutes.notification);
+                  },
                 ),
               ),
             ],
@@ -514,7 +517,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   ),
                 ),
                 Text(
-                  'Perubahan Pola Pergerakan',
+                  '$_langkah langkah hari ini',
                   style: TextStyle(fontSize: 12, color: AppColors.textGrey),
                 ),
               ],
@@ -546,10 +549,10 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   ),
                 ),
                 Text(
-                  _status == 'bahaya'
+                  _jatuh
                       ? 'Jatuh Terdeteksi'
                       : _status == 'peringatan'
-                          ? 'Terdeteksi'
+                          ? 'Resiko meningkat'
                           : 'Tidak Terdeteksi',
                   style: TextStyle(fontSize: 12, color: AppColors.textGrey),
                 ),

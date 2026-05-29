@@ -4,7 +4,6 @@ import 'utils/app_routes.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
-import 'screens/monitoring_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/notif_screen.dart';
 import 'screens/main_navigation.dart';
