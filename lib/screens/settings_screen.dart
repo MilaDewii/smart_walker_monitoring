@@ -71,8 +71,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 16),
                       _buildPairDevice(),
                       const SizedBox(height: 16),
-                      _buildConnectionStatus(),
-                      const SizedBox(height: 16),
                       _buildEmergencyContact(),
                       const SizedBox(height: 24),
                     ],
@@ -865,86 +863,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── 6. CONNECTION STATUS ─────────────────────────────
-  Widget _buildConnectionStatus() {
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionTitle(
-              'Status Koneksi', Icons.signal_cellular_alt, AppColors.primary),
-          const SizedBox(height: 4),
-          Text('Status perangkat dan jaringan',
-              style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-          const SizedBox(height: 16),
-          _buildConnectionItem(
-            icon: Icons.wifi,
-            label: 'WiFi',
-            detail: _wifiStatus ? 'Guardian-IoT' : 'Tidak terhubung',
-            isActive: _wifiStatus,
-          ),
-          _buildDivider(),
-          _buildConnectionItem(
-            icon: Icons.bluetooth,
-            label: 'Bluetooth',
-            detail: _bluetoothStatus ? 'GW-001 Connected' : 'Tidak aktif',
-            isActive: _bluetoothStatus,
-          ),
-          _buildDivider(),
-          _buildConnectionItem(
-            icon: Icons.sim_card_outlined,
-            label: 'SIM808 / GSM',
-            detail: _sim808Status ? 'Sinyal: 4G' : 'Tidak terdeteksi',
-            isActive: _sim808Status,
-          ),
-          const SizedBox(height: 12),
-          // Overall status pill
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: (_wifiStatus || _bluetoothStatus)
-                  ? AppColors.statusGreen.withOpacity(0.1)
-                  : AppColors.statusRed.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: (_wifiStatus || _bluetoothStatus)
-                    ? AppColors.statusGreen.withOpacity(0.3)
-                    : AppColors.statusRed.withOpacity(0.2),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: (_wifiStatus || _bluetoothStatus)
-                        ? AppColors.statusGreen
-                        : AppColors.statusRed,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  (_wifiStatus || _bluetoothStatus)
-                      ? 'Device Online'
-                      : 'Device Offline',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: (_wifiStatus || _bluetoothStatus)
-                          ? AppColors.statusGreen
-                          : AppColors.statusRed),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildConnectionItem({
     required IconData icon,

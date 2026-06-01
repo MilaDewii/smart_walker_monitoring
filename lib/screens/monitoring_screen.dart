@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
+import '../utils/app_routes.dart';
 import '../utils/app_colors.dart';
 
 class MonitoringScreen extends StatefulWidget {
@@ -469,7 +470,11 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.pushReplacementNamed(
+                        context, AppRoutes.location);
+                  },
+                  
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     shape: RoundedRectangleBorder(

@@ -38,6 +38,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final bool _wifi = true;
   final bool _bluetooth = true;
   final bool _gps = true;
+  final bool _gsm = false;
+  final bool _firebaseRtd = false;
 
   // ── STATISTIK MONITORING ──
   final int _totalMonitoring = 128;
@@ -225,8 +227,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildInfoAkun(),
                       const SizedBox(height: 16),
                       _buildInfoWalker(),
-                      const SizedBox(height: 16),
-                      _buildPairingDevice(),
                       const SizedBox(height: 16),
                       _buildStatusKoneksi(),
                       const SizedBox(height: 16),
@@ -647,84 +647,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return AppColors.statusRed;
   }
 
-  // ── PAIRING DEVICE ───────────────────────────────────
-  Widget _buildPairingDevice() {
-    return InkWell(
-      onTap: () => _showPairingDialog(context),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.primary, AppColors.primary.withOpacity(0.75)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
+// ── STATUS KONEKSI ───────────────────────────────────
+Widget _buildStatusKoneksi() {
+  return _buildCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('Status Koneksi', Icons.signal_cellular_alt),
+        const SizedBox(height: 12),
+        Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.qr_code_scanner,
-                  color: Colors.white, size: 28),
-            ),
-            const SizedBox(width: 16),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Pair Device',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold)),
-                  SizedBox(height: 2),
-                  Text('Scan QR untuk menghubungkan walker baru',
-                      style: TextStyle(color: Colors.white70, fontSize: 12)),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: Colors.white, size: 24),
+            _buildKoneksiChip(Icons.signal_cellular_alt, 'GSM Network', _gsm),
+            const SizedBox(width: 8),
+            _buildKoneksiChip(Icons.gps_fixed, 'GPS', _gps),
+            const SizedBox(width: 8),
+            _buildKoneksiChip(Icons.cloud_done, 'Firebase RTD', _firebaseRtd),
           ],
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 
-  // ── STATUS KONEKSI ───────────────────────────────────
-  Widget _buildStatusKoneksi() {
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionTitle('Status Koneksi', Icons.signal_cellular_alt),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildKoneksiChip(Icons.wifi, 'WiFi', _wifi),
-              const SizedBox(width: 8),
-              _buildKoneksiChip(Icons.bluetooth, 'Bluetooth', _bluetooth),
-              const SizedBox(width: 8),
-              _buildKoneksiChip(Icons.gps_fixed, 'GPS', _gps),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildKoneksiChip(IconData icon, String label, bool aktif) {
     return Expanded(
