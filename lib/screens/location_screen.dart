@@ -5,21 +5,20 @@ import 'package:latlong2/latlong.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
 
-
 // ============================================================
 // COLORS
 // ============================================================
 class _C {
-  static const Color primary      = AppColors.primary;
-  static const Color secondary    = AppColors.secondary;
-  static const Color bgPage       = Color(0xFFE8F0FB);
-  static const Color white        = AppColors.white;
-  static const Color textDark     = AppColors.textDark;
-  static const Color textMid      = AppColors.textGrey;
-  static const Color amanText     = AppColors.statusGreen;
-  static const Color amanBg       = Color(0xFFDCFCE7);
-  static const Color bahayaText   = AppColors.statusRed;
-  static const Color bahayaBg     = Color(0xFFFEE2E2);
+  static const Color primary = AppColors.primary;
+  static const Color secondary = AppColors.secondary;
+  static const Color bgPage = Color(0xFFE8F0FB);
+  static const Color white = AppColors.white;
+  static const Color textDark = AppColors.textDark;
+  static const Color textMid = AppColors.textGrey;
+  static const Color amanText = AppColors.statusGreen;
+  static const Color amanBg = Color(0xFFDCFCE7);
+  static const Color bahayaText = AppColors.statusRed;
+  static const Color bahayaBg = Color(0xFFFEE2E2);
 }
 
 // ============================================================
@@ -34,13 +33,12 @@ class LocationScreen extends StatefulWidget {
 
 class _LocationScreenState extends State<LocationScreen>
     with TickerProviderStateMixin {
-
   // ── Map controller
   final MapController _mapController = MapController();
 
   // ── State
-  bool _isConnected    = true;
-  bool _isInSafeZone   = true;
+  bool _isConnected = true;
+  bool _isInSafeZone = true;
 
   // ── Koordinat (simulasi lansia)
   LatLng _lansiaPos = const LatLng(-6.98212, 110.41850);
@@ -57,14 +55,14 @@ class _LocationScreenState extends State<LocationScreen>
 
   // ── Animation controller untuk marker pulse
   late AnimationController _pulseCtrl;
-  late Animation<double>   _pulseAnim;
+  late Animation<double> _pulseAnim;
 
   // ── Riwayat path
   final List<LatLng> _pathHistory = [];
 
   // ── Layer visibility
-  bool _showPath      = true;
-  bool _showGeofence  = true;
+  bool _showPath = true;
+  bool _showGeofence = true;
 
   @override
   void initState() {
@@ -100,7 +98,7 @@ class _LocationScreenState extends State<LocationScreen>
     final offsetLng = (DateTime.now().millisecond % 7 - 3) * 0.00005;
 
     final newPos = LatLng(
-      _lansiaPos.latitude  + offsetLat,
+      _lansiaPos.latitude + offsetLat,
       _lansiaPos.longitude + offsetLng,
     );
 
@@ -109,7 +107,7 @@ class _LocationScreenState extends State<LocationScreen>
     final inSafe = dist <= _geofenceRadius;
 
     setState(() {
-      _lansiaPos  = newPos;
+      _lansiaPos = newPos;
       _lastUpdate = DateTime.now();
       _isInSafeZone = inSafe;
       _pathHistory.add(newPos);
@@ -168,7 +166,8 @@ class _LocationScreenState extends State<LocationScreen>
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => Navigator.pushReplacementNamed(context, AppRoutes.monitoring),
+            onTap: () =>
+                Navigator.pushReplacementNamed(context, AppRoutes.monitoring),
             child: Container(
               width: 38,
               height: 38,
@@ -176,8 +175,8 @@ class _LocationScreenState extends State<LocationScreen>
                 color: _C.primary,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.chevron_left,
-                  color: Colors.white, size: 22),
+              child:
+                  const Icon(Icons.chevron_left, color: Colors.white, size: 22),
             ),
           ),
           const SizedBox(width: 12),
@@ -197,9 +196,7 @@ class _LocationScreenState extends State<LocationScreen>
                       height: 7,
                       margin: const EdgeInsets.only(right: 5),
                       decoration: BoxDecoration(
-                        color: _isConnected
-                            ? _C.amanText
-                            : _C.bahayaText,
+                        color: _isConnected ? _C.amanText : _C.bahayaText,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -207,9 +204,7 @@ class _LocationScreenState extends State<LocationScreen>
                       'Live Tracking',
                       style: TextStyle(
                           fontSize: 11,
-                          color: _isConnected
-                              ? _C.amanText
-                              : _C.bahayaText,
+                          color: _isConnected ? _C.amanText : _C.bahayaText,
                           fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -222,8 +217,8 @@ class _LocationScreenState extends State<LocationScreen>
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: _isConnected ? _C.amanBg : _C.bahayaBg,
                   borderRadius: BorderRadius.circular(8),
@@ -235,9 +230,7 @@ class _LocationScreenState extends State<LocationScreen>
                       height: 6,
                       margin: const EdgeInsets.only(right: 5),
                       decoration: BoxDecoration(
-                        color: _isConnected
-                            ? _C.amanText
-                            : _C.bahayaText,
+                        color: _isConnected ? _C.amanText : _C.bahayaText,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -246,17 +239,14 @@ class _LocationScreenState extends State<LocationScreen>
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: _isConnected
-                              ? _C.amanText
-                              : _C.bahayaText),
+                          color: _isConnected ? _C.amanText : _C.bahayaText),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 3),
               Text(_updateStr,
-                  style: const TextStyle(
-                      fontSize: 9, color: _C.textMid)),
+                  style: const TextStyle(fontSize: 9, color: _C.textMid)),
             ],
           ),
         ],
@@ -367,26 +357,20 @@ class _LocationScreenState extends State<LocationScreen>
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
-                          color: _isInSafeZone
-                              ? _C.primary
-                              : _C.bahayaText,
+                          color: _isInSafeZone ? _C.primary : _C.bahayaText,
                           shape: BoxShape.circle,
-                          border: Border.all(
-                              color: Colors.white, width: 2.5),
+                          border: Border.all(color: Colors.white, width: 2.5),
                           boxShadow: [
                             BoxShadow(
-                              color: (_isInSafeZone
-                                      ? _C.primary
-                                      : _C.bahayaText)
-                                  .withOpacity(0.4),
+                              color:
+                                  (_isInSafeZone ? _C.primary : _C.bahayaText)
+                                      .withOpacity(0.4),
                               blurRadius: 8,
                             )
                           ],
                         ),
-                        child: const Icon(
-                            Icons.person_pin_rounded,
-                            color: Colors.white,
-                            size: 18),
+                        child: const Icon(Icons.person_pin_rounded,
+                            color: Colors.white, size: 18),
                       ),
                     ],
                   );
@@ -472,9 +456,7 @@ class _LocationScreenState extends State<LocationScreen>
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: _C.textDark)),
-            Text(sub,
-                style: const TextStyle(
-                    fontSize: 9, color: _C.textMid)),
+            Text(sub, style: const TextStyle(fontSize: 9, color: _C.textMid)),
           ],
         ),
       ],
@@ -502,8 +484,7 @@ class _LocationScreenState extends State<LocationScreen>
             tooltip: 'Zoom in',
             onTap: () {
               _mapController.move(
-                  _mapController.camera.center,
-                  _mapController.camera.zoom + 1);
+                  _mapController.camera.center, _mapController.camera.zoom + 1);
             },
           ),
           const SizedBox(height: 4),
@@ -513,8 +494,7 @@ class _LocationScreenState extends State<LocationScreen>
             tooltip: 'Zoom out',
             onTap: () {
               _mapController.move(
-                  _mapController.camera.center,
-                  _mapController.camera.zoom - 1);
+                  _mapController.camera.center, _mapController.camera.zoom - 1);
             },
           ),
           const SizedBox(height: 8),
@@ -524,8 +504,7 @@ class _LocationScreenState extends State<LocationScreen>
                 ? Icons.layers_rounded
                 : Icons.layers_clear_rounded,
             tooltip: 'Toggle geofence',
-            onTap: () =>
-                setState(() => _showGeofence = !_showGeofence),
+            onTap: () => setState(() => _showGeofence = !_showGeofence),
             color: _showGeofence ? _C.amanText : _C.textMid,
           ),
         ],
@@ -557,8 +536,7 @@ class _LocationScreenState extends State<LocationScreen>
               )
             ],
           ),
-          child: Icon(icon,
-              size: 20, color: color ?? _C.textDark),
+          child: Icon(icon, size: 20, color: color ?? _C.textDark),
         ),
       ),
     );
@@ -571,8 +549,7 @@ class _LocationScreenState extends State<LocationScreen>
       right: 12,
       bottom: 12,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.96),
           borderRadius: BorderRadius.circular(16),
@@ -592,9 +569,7 @@ class _LocationScreenState extends State<LocationScreen>
               children: [
                 Icon(Icons.location_on_rounded,
                     size: 15,
-                    color: _isInSafeZone
-                        ? _C.primary
-                        : _C.bahayaText),
+                    color: _isInSafeZone ? _C.primary : _C.bahayaText),
                 const SizedBox(width: 6),
                 Text(
                   'Lat : ${_lansiaPos.latitude.toStringAsFixed(5)}'
@@ -614,18 +589,15 @@ class _LocationScreenState extends State<LocationScreen>
                     size: 15, color: _C.textMid),
                 const SizedBox(width: 6),
                 Text(_timeStr,
-                    style: const TextStyle(
-                        fontSize: 11, color: _C.textMid)),
+                    style: const TextStyle(fontSize: 11, color: _C.textMid)),
                 const Spacer(),
                 // Status zona
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 400),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _isInSafeZone
-                        ? _C.amanBg
-                        : _C.bahayaBg,
+                    color: _isInSafeZone ? _C.amanBg : _C.bahayaBg,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -635,21 +607,15 @@ class _LocationScreenState extends State<LocationScreen>
                             ? Icons.shield_rounded
                             : Icons.warning_rounded,
                         size: 12,
-                        color: _isInSafeZone
-                            ? _C.amanText
-                            : _C.bahayaText,
+                        color: _isInSafeZone ? _C.amanText : _C.bahayaText,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _isInSafeZone
-                            ? 'Dalam Area Aman'
-                            : 'Di Luar Area Aman',
+                        _isInSafeZone ? 'Dalam Area Aman' : 'Di Luar Area Aman',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: _isInSafeZone
-                              ? _C.amanText
-                              : _C.bahayaText,
+                          color: _isInSafeZone ? _C.amanText : _C.bahayaText,
                         ),
                       ),
                     ],
