@@ -2,7 +2,6 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/app_colors.dart';
 
@@ -44,7 +43,6 @@ class AlertItem {
 // ============================================================
 class _C {
   static const Color primary = AppColors.primary; // #1E3A8A biru tua
-  static const Color secondary = AppColors.secondary; // #3B82F6 biru muda
   static const Color primaryLight = Color(0xFFDBEAFE);
   static const Color bgPage = Color(0xFFE8F0FB); // latar biru sangat muda
   static const Color white = AppColors.white;
