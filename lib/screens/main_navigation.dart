@@ -17,17 +17,16 @@ class _MainNavigationState extends State<MainNavigation> {
   int currentIndex = 0;
 
   final List<Widget> pages = [
-    const MonitoringScreen(), // Beranda
-    const HistoryScreen(),    // History
-    const ProfileScreen(),    // Profile
-    const SettingsScreen(),   // Settings
+    const MonitoringScreen(),
+    const HistoryScreen(),
+    const ProfileScreen(),
+    const SettingsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 244, 245, 247),
-      extendBody: true,
+      backgroundColor: const Color(0xFFB8D4F0),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
         child: KeyedSubtree(
@@ -35,13 +34,16 @@ class _MainNavigationState extends State<MainNavigation> {
           child: pages[currentIndex],
         ),
       ),
-      bottomNavigationBar: ButtonNavbar(
-        currentIndex: currentIndex,
-        onTap: (index) {
-          setState(() {
-            currentIndex = index;
-          });
-        },
+      bottomNavigationBar: Container(
+        color: const Color(0xFFB8D4F0),
+        child: ButtonNavbar(
+          currentIndex: currentIndex,
+          onTap: (index) {
+            setState(() {
+              currentIndex = index;
+            });
+          },
+        ),
       ),
     );
   }
