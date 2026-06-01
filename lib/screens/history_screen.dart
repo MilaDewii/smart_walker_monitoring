@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'dart:ui' as ui;
 import '../utils/app_colors.dart';
+import 'package:latlong2/latlong.dart';
+import '../utils/app_routes.dart';
 
 // ============================================================
 // COLORS
@@ -57,16 +61,14 @@ class DistanceDataPoint {
 
 class StatusSistem {
   final int batteryPercent;
-  final double voltage;
-  final bool wifiConnected;
-  final bool mqttConnected;
-  final String motorStatus;
+  final bool gsmNetworkConnected;
+  final bool gpsConnected;
+  final bool firebaseRtdConnected;
   const StatusSistem({
     required this.batteryPercent,
-    required this.voltage,
-    this.wifiConnected = true,
-    this.mqttConnected = true,
-    this.motorStatus = 'Normal',
+    this.gsmNetworkConnected = true,
+    this.gpsConnected = true,
+    this.firebaseRtdConnected = true,
   });
 }
 
@@ -206,10 +208,13 @@ final List<HistoryItem> _dummyHistory = [
       },
       statusSistem: const StatusSistem(
         batteryPercent: 78,
-        voltage: 3.92,
-        wifiConnected: true,
-        mqttConnected: true,
-        motorStatus: 'Normal',
+        // voltage: 3.92,
+        gsmNetworkConnected: false,
+        gpsConnected: true,
+        firebaseRtdConnected: false,
+        // wifiConnected: true,
+        // mqttConnected: true,
+        // motorStatus: 'Normal',
       ),
       ringkasanSensor: const RingkasanSensor(
         hcsr04Depan: '45 cm',
@@ -259,10 +264,10 @@ final List<HistoryItem> _dummyHistory = [
       lokasiJarakPusat: '15.6 meter',
       statusSistem: const StatusSistem(
         batteryPercent: 85,
-        voltage: 4.10,
-        wifiConnected: true,
-        mqttConnected: true,
-        motorStatus: 'Normal',
+        // voltage: 4.10,
+        // wifiConnected: true,
+        // mqttConnected: true,
+        // motorStatus: 'Normal',
       ),
       tindakanSistem: [
         'Data dikirim ke Firebase',
@@ -312,10 +317,10 @@ final List<HistoryItem> _dummyHistory = [
       },
       statusSistem: const StatusSistem(
         batteryPercent: 62,
-        voltage: 3.75,
-        wifiConnected: true,
-        mqttConnected: true,
-        motorStatus: 'Normal',
+        // voltage: 3.75,
+        // wifiConnected: true,
+        // mqttConnected: true,
+        // motorStatus: 'Normal',
       ),
       tindakanSistem: [
         'Data dikirim ke Firebase',
@@ -356,10 +361,10 @@ final List<HistoryItem> _dummyHistory = [
       ],
       statusSistem: const StatusSistem(
         batteryPercent: 78,
-        voltage: 3.92,
-        wifiConnected: true,
-        mqttConnected: true,
-        motorStatus: 'Normal',
+        // voltage: 3.92,
+        // wifiConnected: true,
+        // mqttConnected: true,
+        // motorStatus: 'Normal',
       ),
       ringkasanSensor: const RingkasanSensor(
         hcsr04Depan: '45 cm',
@@ -418,10 +423,10 @@ final List<HistoryItem> _dummyHistory = [
       ],
       statusSistem: const StatusSistem(
         batteryPercent: 78,
-        voltage: 3.92,
-        wifiConnected: true,
-        mqttConnected: true,
-        motorStatus: 'Normal',
+        // voltage: 3.92,
+        // wifiConnected: true,
+        // mqttConnected: true,
+        // motorStatus: 'Normal',
       ),
       ringkasanSensor: const RingkasanSensor(
         hcsr04Depan: '45 cm',
@@ -504,10 +509,10 @@ final List<HistoryItem> _dummyHistory = [
       tindakanSistem: ['Log status dikirim ke Firebase'],
       statusSistem: const StatusSistem(
         batteryPercent: 90,
-        voltage: 4.05,
-        wifiConnected: true,
-        mqttConnected: true,
-        motorStatus: 'Normal',
+        // voltage: 4.05,
+        // wifiConnected: true,
+        // mqttConnected: true,
+        // motorStatus: 'Normal',
       ),
     ),
   ),
@@ -551,10 +556,10 @@ final List<HistoryItem> _dummyHistory = [
       tindakanSistem: ['Log status dikirim ke Firebase'],
       statusSistem: const StatusSistem(
         batteryPercent: 78,
-        voltage: 3.92,
-        wifiConnected: true,
-        mqttConnected: true,
-        motorStatus: 'Normal',
+        // voltage: 3.92,
+        // wifiConnected: true,
+        // mqttConnected: true,
+        // motorStatus: 'Normal',
       ),
     ),
   ),
@@ -1175,7 +1180,7 @@ class _DetailSheet extends StatelessWidget {
                     const SizedBox(height: 12),
                   ],
                   if (item.extra.lokasiNama != null) ...[
-                    _lokasiSection(),
+                    _lokasiSection(context),
                     const SizedBox(height: 12),
                   ],
                   if (item.extra.statusSistem != null) ...[
@@ -1524,52 +1529,144 @@ class _DetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _lokasiSection() {
+  Widget _lokasiSection(BuildContext context) {
     final e = item.extra;
+
+    // Parse koordinat dari string "-7.9711, 112.6328"
+    final coord = () {
+      try {
+        final parts = (e.lokasiKoordinat ?? '-7.9711, 112.6328').split(',');
+        return LatLng(
+          double.parse(parts[0].trim()),
+          double.parse(parts[1].trim()),
+        );
+      } catch (_) {
+        return const LatLng(-7.9711, 112.6328);
+      }
+    }();
+
+    final Color markerColor;
+    switch (item.status) {
+      case HistoryStatus.bahaya:
+        markerColor = _C.bahayaText;
+        break;
+      case HistoryStatus.peringatan:
+        markerColor = _C.warnText;
+        break;
+      case HistoryStatus.aman:
+        markerColor = _C.amanText;
+        break;
+      case HistoryStatus.info:
+        markerColor = _C.infoText;
+        break;
+    }
+
     return _card(
       title: 'Informasi Lokasi',
       icon: Icons.location_on_rounded,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── MAP ──────────────────────────────────────────────
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Container(
-              height: 120,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F4FD),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
-              ),
-              child: Stack(
+            child: SizedBox(
+              height: 160,
+              child: FlutterMap(
+                options: MapOptions(
+                  initialCenter: coord,
+                  initialZoom: 15,
+                  interactionOptions: const InteractionOptions(
+                    flags: InteractiveFlag.all, // allow interaction in preview
+                  ),
+                ),
                 children: [
-                  CustomPaint(painter: _MapGridPainter(), size: Size.infinite),
-                  const Center(
-                    child: Icon(Icons.location_pin,
-                        color: _C.bahayaText, size: 36),
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.guardianwalk.app',
+                  ),
+                  CircleLayer(
+                    circles: [
+                      CircleMarker(
+                        point: coord,
+                        radius: 80,
+                        color: markerColor.withOpacity(0.12),
+                        borderColor: markerColor,
+                        borderStrokeWidth: 2,
+                        useRadiusInMeter: true,
+                      ),
+                    ],
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: coord,
+                        width: 40,
+                        height: 40,
+                        child: Icon(
+                          Icons.location_pin,
+                          color: markerColor,
+                          size: 40,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 10),
+
+          // ── KOORDINAT ────────────────────────────────────────
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              Text(
+                'Lat: ${coord.latitude.toStringAsFixed(4)}',
+                style: const TextStyle(fontSize: 11, color: _C.textMid),
+              ),
+              Text(
+                'Lng: ${coord.longitude.toStringAsFixed(4)}',
+                style: const TextStyle(fontSize: 11, color: _C.textMid),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 6),
           _kvRow('Lokasi', e.lokasiNama ?? '-'),
-          _kvRow('Koordinat', e.lokasiKoordinat ?? '-'),
           _kvRow('Status Geofence', e.kondisiGeofence),
           if (e.lokasiJarakPusat != null)
             _kvRow('Jarak dari Pusat Area', e.lokasiJarakPusat!),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.map_outlined, size: 14),
-            label: const Text('Lihat di Google Maps',
-                style: TextStyle(fontSize: 12)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _C.primary,
-              side: BorderSide(color: _C.primary.withOpacity(0.5)),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              minimumSize: const Size(double.infinity, 0),
+
+          const SizedBox(height: 10),
+
+          // ── TOMBOL ───────────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pushNamed(context, AppRoutes.location);
+              },
+              icon: Icon(Icons.map_outlined, size: 16, color: _C.primary),
+              label: Text(
+                'Lihat di Google Maps',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _C.primary,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: _C.primary.withOpacity(0.9)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                backgroundColor: Colors.transparent,
+              ),
             ),
           ),
         ],
@@ -1579,41 +1676,52 @@ class _DetailSheet extends StatelessWidget {
 
   Widget _statusSistem() {
     final ss = item.extra.statusSistem!;
+
     return _card(
       title: 'Status Sistem Saat Kejadian',
       child: Column(
         children: [
           Row(
             children: [
-              _statBox(
-                  'Baterai',
-                  '${ss.batteryPercent}%',
-                  Icons.battery_charging_full_rounded,
-                  ss.batteryPercent > 50 ? _C.amanText : _C.warnText),
+              Expanded(
+                child: _systemStatusCard(
+                  title: 'Baterai',
+                  value: '${ss.batteryPercent}%',
+                  icon: Icons.battery_charging_full_rounded,
+                  isActive: ss.batteryPercent > 20,
+                ),
+              ),
               const SizedBox(width: 8),
-              _statBox('Tegangan', '${ss.voltage.toStringAsFixed(2)} V',
-                  Icons.flash_on_rounded, _C.warnText),
-              const SizedBox(width: 8),
-              _statBox(
-                  'Motor', ss.motorStatus, Icons.settings_rounded, _C.amanText),
+              Expanded(
+                child: _systemStatusCard(
+                  title: 'GSM Network',
+                  value: ss.gsmNetworkConnected ? 'Aktif' : 'Nonaktif',
+                  icon: Icons.signal_cellular_alt_rounded,
+                  isActive: ss.gsmNetworkConnected,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                  child: _connBox(
-                      'WiFi',
-                      ss.wifiConnected ? 'Connected' : 'Disconnected',
-                      Icons.wifi_rounded,
-                      ss.wifiConnected ? _C.amanText : _C.bahayaText)),
+                child: _systemStatusCard(
+                  title: 'GPS',
+                  value: ss.gpsConnected ? 'Aktif' : 'Nonaktif',
+                  icon: Icons.gps_fixed_rounded,
+                  isActive: ss.gpsConnected,
+                ),
+              ),
               const SizedBox(width: 8),
               Expanded(
-                  child: _connBox(
-                      'MQTT',
-                      ss.mqttConnected ? 'Connected' : 'Disconnected',
-                      Icons.cloud_rounded,
-                      ss.mqttConnected ? _C.amanText : _C.bahayaText)),
+                child: _systemStatusCard(
+                  title: 'Firebase RTD',
+                  value: ss.firebaseRtdConnected ? 'Aktif' : 'Nonaktif',
+                  icon: Icons.cloud_done_rounded,
+                  isActive: ss.firebaseRtdConnected,
+                ),
+              ),
             ],
           ),
         ],
@@ -1621,52 +1729,47 @@ class _DetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _statBox(String label, String value, IconData icon, Color color) =>
-      Expanded(
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(10)),
-          child: Column(
-            children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(height: 4),
-              Text(value,
-                  style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.bold, color: color)),
-              Text(label,
-                  style: const TextStyle(fontSize: 10, color: _C.textMid)),
-            ],
-          ),
-        ),
-      );
-
-  Widget _connBox(String label, String value, IconData icon, Color color) =>
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(10)),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(fontSize: 11, color: _C.textMid)),
-                Text(value,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: color)),
-              ],
+  Widget _systemStatusCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required bool isActive,
+  }) {
+    final Color color = isActive ? _C.amanText : _C.bahayaText;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.25)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 24, color: color),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
             ),
-          ],
-        ),
-      );
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: _C.textMid,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _tindakanSistem() => _card(
         title: 'Tindakan Sistem',
@@ -1816,7 +1919,7 @@ class _DistanceChartPainter extends CustomPainter {
     double yFor(double val) =>
         padT + h * (1 - (val - minVal) / (maxVal - minVal));
 
-    final fillPath = Path();
+    final ui.Path fillPath = ui.Path();
     for (int i = 0; i < data.length; i++) {
       final x = padL + stepX * i;
       final y = yFor(data[i].distance);
@@ -1840,7 +1943,7 @@ class _DistanceChartPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-    final linePath = Path();
+    final ui.Path linePath = ui.Path();
     for (int i = 0; i < data.length; i++) {
       final x = padL + stepX * i;
       final y = yFor(data[i].distance);
@@ -1906,7 +2009,7 @@ class _SensorChartPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-      final path = Path();
+      final ui.Path path = ui.Path();
       for (int i = 0; i < vals.length; i++) {
         final x = stepX * i;
         final y = yFor(vals[i]);

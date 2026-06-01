@@ -51,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       text: 'Guardian',
                       style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w300,
+                        fontWeight: FontWeight.w400,
                         color: AppColors.primary,
                       ),
                     ),
@@ -59,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       text: 'Walk',
                       style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w200,
                         color: AppColors.primary,
                       ),
                     ),

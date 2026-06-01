@@ -15,19 +15,26 @@ class ButtonNavbar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       child: SizedBox(
-        height: 100, // lebih tinggi supaya ada ruang untuk icon aktif
+        height: 100,
         child: Stack(
           clipBehavior: Clip.none,
           alignment: Alignment.bottomCenter,
           children: [
-            // NAVBAR SHAPE — mulai dari y=20 ke bawah
+            // NAVBAR SHAPE
             Positioned(
               left: 0,
               right: 0,
-              top: 20, // geser shape ke bawah, beri ruang icon aktif di atas
+              top: 20,
               bottom: 0,
-              child: CustomPaint(
-                painter: BottomNavPainter(currentIndex),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return CustomPaint(
+                    painter: BottomNavPainter(
+                      currentIndex,
+                      constraints.maxWidth, // ✅ kirim lebar aktual
+                    ),
+                  );
+                },
               ),
             ),
 
@@ -83,13 +90,13 @@ class _NavItem extends StatelessWidget {
       child: SizedBox(
         height: 100,
         child: Stack(
-          alignment: Alignment.center,
+          alignment: Alignment.topCenter, // ✅ ganti ke topCenter
           clipBehavior: Clip.none,
           children: [
             AnimatedPositioned(
               duration: const Duration(milliseconds: 350),
               curve: Curves.easeOut,
-              top: isActive ? 0 : 42, // sesuaikan posisi dengan tinggi baru
+              top: isActive ? 0 : 42,
               left: 0,
               right: 0,
               child: Center(
@@ -127,8 +134,9 @@ class _NavItem extends StatelessWidget {
 // ================= CUSTOM PAINTER =================
 class BottomNavPainter extends CustomPainter {
   final int currentIndex;
+  final double navWidth; // ✅ tambah parameter ini
 
-  BottomNavPainter(this.currentIndex);
+  BottomNavPainter(this.currentIndex, this.navWidth);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -138,11 +146,10 @@ class BottomNavPainter extends CustomPainter {
     const double notchRadius = 36.0;
     const double cornerRadius = 28.0;
 
-    final double itemWidth = width / 4;
-    final double center = ((currentIndex * itemWidth) + (itemWidth / 2))
-        .clamp(notchRadius + 22, width - notchRadius - 22);
+    final double itemWidth = navWidth / 4; // ✅ pakai navWidth, bukan width
+    // ✅ HAPUS .clamp() — ini penyebab utama notch tidak sampai ke pojok
+    final double center = (currentIndex * itemWidth) + (itemWidth / 2);
 
-    // Clip canvas ke rounded rect supaya sudut tidak bocor keluar
     final RRect clipRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, width, height),
       const Radius.circular(cornerRadius),
@@ -192,6 +199,7 @@ class BottomNavPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant BottomNavPainter oldDelegate) {
-    return oldDelegate.currentIndex != currentIndex;
+    return oldDelegate.currentIndex != currentIndex ||
+        oldDelegate.navWidth != navWidth;
   }
 }

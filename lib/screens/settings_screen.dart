@@ -852,7 +852,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text('Batal', style: TextStyle(color: AppColors.textGrey)),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pushNamed(context, '/qr-connect'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(
@@ -864,7 +864,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
 
   Widget _buildConnectionItem({
     required IconData icon,
