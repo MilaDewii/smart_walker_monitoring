@@ -30,7 +30,7 @@ class MyApp extends StatelessWidget {
         ),
         fontFamily: 'Poppins',
       ),
-      initialRoute: AppRoutes.onboarding,
+      initialRoute: AppRoutes.splash,
       routes: {
         AppRoutes.splash: (context) => const SplashScreen(),
         AppRoutes.login: (context) => const LoginScreen(),
