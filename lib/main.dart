@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+
 import 'utils/app_colors.dart';
 import 'utils/app_routes.dart';
 import 'screens/splash_screen.dart';
@@ -12,7 +14,11 @@ import 'screens/walker_connect_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/location_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp();
+
   runApp(const MyApp());
 }
 
@@ -23,12 +29,12 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'GuardianWalk',
-      debugShowCheckedModeBanner: false, 
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.primary,
         ),
-        fontFamily: 'Poppins', 
+        fontFamily: 'Poppins',
       ),
       initialRoute: AppRoutes.onboarding,
       routes: {
