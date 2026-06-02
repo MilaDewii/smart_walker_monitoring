@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 import 'utils/app_colors.dart';
 import 'utils/app_routes.dart';
@@ -18,6 +19,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp();
+  print('Firebase initialized successfully');
+
+  FirebaseDatabase.instance.ref('.info/connected').onValue.listen((event) {
+    final isConnected = event.snapshot.value == true;
+    print('Firebase Realtime Database connected: $isConnected');
+  });
 
   runApp(const MyApp());
 }

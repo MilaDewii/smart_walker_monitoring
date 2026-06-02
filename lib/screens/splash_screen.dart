@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -54,7 +55,7 @@ class _SplashScreenState extends State<SplashScreen> {
                       text: 'Walk',
                       style: TextStyle(
                         fontSize: 36,
-                        fontWeight: FontWeight.w200, 
+                        fontWeight: FontWeight.w200,
                         color: AppColors.primary,
                         letterSpacing: 0.5,
                       ),
@@ -90,9 +91,36 @@ class _SplashScreenState extends State<SplashScreen> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(
-                        context, AppRoutes.onboarding);
+                  onPressed: () async {
+                    try {
+                      await FirebaseDatabase.instance.ref("test").set({
+                        "status": "connected",
+                        "time": DateTime.now().toString(),
+                      });
+
+                      print("Firebase RTDB Connected");
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Firebase Connected"),
+                          ),
+                        );
+
+                        Navigator.pushReplacementNamed(
+                            context, AppRoutes.onboarding);
+                      }
+                    } catch (e) {
+                      print("Firebase Error: $e");
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Firebase Error: $e"),
+                          ),
+                        );
+                      }
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
