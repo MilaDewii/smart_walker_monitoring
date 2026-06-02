@@ -9,7 +9,7 @@ import 'screens/notif_screen.dart';
 import 'screens/main_navigation.dart';
 import 'screens/scan_qr_screen.dart';
 import 'screens/walker_connect_screen.dart';
-import 'screens/history_screen.dart';
+// import 'screens/history_screen.dart'; // Removed to clear analyzer warning
 import 'screens/location_screen.dart';
 
 void main() {
@@ -23,12 +23,12 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'GuardianWalk',
-      debugShowCheckedModeBanner: false, 
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.primary,
         ),
-        fontFamily: 'Poppins', 
+        fontFamily: 'Poppins',
       ),
       initialRoute: AppRoutes.onboarding,
       routes: {

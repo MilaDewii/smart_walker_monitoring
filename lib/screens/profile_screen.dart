@@ -24,6 +24,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _namaCtrl;
   late TextEditingController _emailCtrl;
   late TextEditingController _noHpCtrl;
+  // Password visibility for change-password dialog
+  bool _oldObscure = true;
+  bool _newObscure = true;
+  bool _confirmObscure = true;
 
   // ── DATA LANSIA ──
   String _namaLansia = 'Siti Aminah';
@@ -36,8 +40,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final int _battery = 89;
 
   // ── STATUS KONEKSI ──
-  final bool _wifi = true;
-  final bool _bluetooth = true;
+  // final bool _wifi = true;
+  // final bool _bluetooth = true;
   final bool _gps = true;
   final bool _gsm = false;
   final bool _firebaseRtd = false;
@@ -651,27 +655,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
 // ── STATUS KONEKSI ───────────────────────────────────
-Widget _buildStatusKoneksi() {
-  return _buildCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle('Status Koneksi', Icons.signal_cellular_alt),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            _buildKoneksiChip(Icons.signal_cellular_alt, 'GSM Network', _gsm),
-            const SizedBox(width: 8),
-            _buildKoneksiChip(Icons.gps_fixed, 'GPS', _gps),
-            const SizedBox(width: 8),
-            _buildKoneksiChip(Icons.cloud_done, 'Firebase RTD', _firebaseRtd),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
+  Widget _buildStatusKoneksi() {
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('Status Koneksi', Icons.signal_cellular_alt),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildKoneksiChip(Icons.signal_cellular_alt, 'GSM Network', _gsm),
+              const SizedBox(width: 8),
+              _buildKoneksiChip(Icons.gps_fixed, 'GPS', _gps),
+              const SizedBox(width: 8),
+              _buildKoneksiChip(Icons.cloud_done, 'Firebase RTD', _firebaseRtd),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildKoneksiChip(IconData icon, String label, bool aktif) {
     return Expanded(
@@ -783,7 +786,7 @@ Widget _buildStatusKoneksi() {
           child: ElevatedButton.icon(
             onPressed: _toggleEdit,
             icon: Icon(
-              _isEditing ? Icons.save_rounded : Icons.edit_rounded,
+              _isEditing ? Icons.check_circle_outline : Icons.edit_outlined,
               size: 20,
               color: Colors.white,
             ),
@@ -862,64 +865,81 @@ Widget _buildStatusKoneksi() {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 24,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Ubah Password',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark)),
-            const SizedBox(height: 16),
-            _buildPasswordField('Password Lama', oldCtrl),
-            const SizedBox(height: 12),
-            _buildPasswordField('Password Baru', newCtrl),
-            const SizedBox(height: 12),
-            _buildPasswordField('Konfirmasi Password Baru', confirmCtrl),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Password berhasil diubah!'),
-                      backgroundColor: AppColors.statusGreen,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Simpan',
-                    style: TextStyle(color: Colors.white, fontSize: 14)),
-              ),
+      builder: (ctx) {
+        bool oldObscureLocal = true;
+        bool newObscureLocal = true;
+        bool confirmObscureLocal = true;
+        return StatefulBuilder(builder: (ctx, sbSetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
             ),
-          ],
-        ),
-      ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ubah Password',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark)),
+                const SizedBox(height: 16),
+                _buildPasswordField('Password Lama', oldCtrl,
+                    obscure: oldObscureLocal,
+                    onToggle: () =>
+                        sbSetState(() => oldObscureLocal = !oldObscureLocal)),
+                const SizedBox(height: 12),
+                _buildPasswordField('Password Baru', newCtrl,
+                    obscure: newObscureLocal,
+                    onToggle: () =>
+                        sbSetState(() => newObscureLocal = !newObscureLocal)),
+                const SizedBox(height: 12),
+                _buildPasswordField('Konfirmasi Password Baru', confirmCtrl,
+                    obscure: confirmObscureLocal,
+                    onToggle: () => sbSetState(
+                        () => confirmObscureLocal = !confirmObscureLocal)),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Password berhasil diubah!'),
+                          backgroundColor: AppColors.statusGreen,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Simpan',
+                        style: TextStyle(color: Colors.white, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
+      },
     );
   }
 
-  Widget _buildPasswordField(String hint, TextEditingController ctrl) {
+  Widget _buildPasswordField(String hint, TextEditingController ctrl,
+      {required bool obscure, required VoidCallback onToggle}) {
     return TextField(
       controller: ctrl,
-      obscureText: true,
+      obscureText: obscure,
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: AppColors.textGrey, fontSize: 13),
@@ -931,12 +951,18 @@ Widget _buildStatusKoneksi() {
         ),
         prefixIcon:
             Icon(Icons.lock_outline, color: AppColors.textGrey, size: 18),
+        suffixIcon: IconButton(
+          onPressed: onToggle,
+          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility,
+              color: AppColors.textGrey, size: 18),
+        ),
         contentPadding:
             const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       ),
     );
   }
 
+  // ignore: unused_element
   void _showPairingDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -1024,7 +1050,6 @@ Widget _buildStatusKoneksi() {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              // TODO: clear token, navigate to login
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.statusRed,

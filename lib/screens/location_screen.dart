@@ -12,7 +12,7 @@ class _C {
   static const Color primary = AppColors.primary;
   static const Color secondary = AppColors.secondary;
   static const Color bgPage = Color(0xFFE8F0FB);
-  static const Color white = AppColors.white;
+  // static const Color white = AppColors.white;
   static const Color textDark = AppColors.textDark;
   static const Color textMid = AppColors.textGrey;
   static const Color amanText = AppColors.statusGreen;
@@ -42,6 +42,7 @@ class _LocationScreenState extends State<LocationScreen>
 
   // ── Koordinat (simulasi lansia)
   LatLng _lansiaPos = const LatLng(-6.98212, 110.41850);
+  bool _initialArgsApplied = false;
 
   // ── Pusat geofence & radius
   final LatLng _geofenceCenter = const LatLng(-6.98212, 110.41800);
@@ -82,6 +83,20 @@ class _LocationScreenState extends State<LocationScreen>
     _moveTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _simulateMove();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialArgsApplied) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is LatLng) {
+        _lansiaPos = args;
+        _pathHistory.clear();
+        _pathHistory.add(_lansiaPos);
+      }
+      _initialArgsApplied = true;
+    }
   }
 
   @override

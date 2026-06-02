@@ -31,9 +31,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── 5. PAIR DEVICE — handled via dialog ──────────────
 
   // ── 6. CONNECTION ─────────────────────────────────────
-  final bool _wifiStatus = true;
-  final bool _bluetoothStatus = true;
-  final bool _sim808Status = false;
+  // final bool _wifiStatus = true;
+  // final bool _bluetoothStatus = true;
+  // final bool _sim808Status = false;
 
   // ── 7. EMERGENCY CONTACT ─────────────────────────────
   String _emergencyName = 'Mila Dewi';
@@ -560,7 +560,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) {
         // Auto close after 2s (simulate calibration)
         Future.delayed(const Duration(seconds: 2), () {
-          if (Navigator.canPop(ctx)) Navigator.pop(ctx);
+          if (!mounted) return;
+          if (Navigator.canPop(context)) Navigator.pop(context);
           onDone();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -865,6 +866,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildConnectionItem({
     required IconData icon,
     required String label,

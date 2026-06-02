@@ -10,7 +10,7 @@ class _C {
   static const Color secondary    = AppColors.secondary;  // #3B82F6
   static const Color bgPage       = Color(0xFFE8F0FB);
   static const Color white        = AppColors.white;
-  static const Color textDark     = AppColors.textDark;
+  // static const Color textDark     = AppColors.textDark;
   static const Color textMid      = AppColors.textGrey;
 }
 

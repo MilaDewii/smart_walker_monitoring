@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/app_colors.dart';
+import '../utils/app_routes.dart';
 
 // ============================================================
 // MODEL
@@ -71,6 +72,8 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen> {
   String _selectedFilter = 'Semua';
   final List<String> _filters = ['Semua', 'Darurat', 'Waspada'];
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   final List<AlertItem> _alerts = [
     AlertItem(
@@ -115,14 +118,21 @@ class _NotificationScreenState extends State<NotificationScreen> {
   ];
 
   List<AlertItem> get _filteredAlerts {
-    if (_selectedFilter == 'Semua') return _alerts;
+    Iterable<AlertItem> list = _alerts;
     if (_selectedFilter == 'Darurat') {
-      return _alerts.where((a) => a.level == AlertLevel.darurat).toList();
+      list = list.where((a) => a.level == AlertLevel.darurat);
+    } else if (_selectedFilter == 'Waspada') {
+      list = list.where((a) => a.level == AlertLevel.waspada);
     }
-    if (_selectedFilter == 'Waspada') {
-      return _alerts.where((a) => a.level == AlertLevel.waspada).toList();
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list.where((a) =>
+          a.title.toLowerCase().contains(q) ||
+          a.description.toLowerCase().contains(q) ||
+          a.date.toLowerCase().contains(q) ||
+          a.time.toLowerCase().contains(q));
     }
-    return _alerts;
+    return list.toList();
   }
 
   int get _totalToday => _alerts.length;
@@ -174,6 +184,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Widget _buildHeader(BuildContext context) {
     return Container(
       color: _C.bgPage,
@@ -210,13 +226,32 @@ class _NotificationScreenState extends State<NotificationScreen> {
               color: _C.white,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                SizedBox(width: 12),
-                Icon(Icons.search, color: _C.textMid, size: 20),
-                SizedBox(width: 8),
-                Text('Search ...',
-                    style: TextStyle(color: _C.textMid, fontSize: 14)),
+                const SizedBox(width: 12),
+                const Icon(Icons.search, size: 20, color: _C.textMid),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search ...',
+                      hintStyle:
+                          const TextStyle(fontSize: 14, color: _C.textMid),
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                if (_searchQuery.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.clear, color: _C.textMid),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  ),
               ],
             ),
           ),
@@ -1086,7 +1121,10 @@ class NotificationDetailScreen extends StatelessWidget {
               width: double.infinity,
               height: 44,
               child: ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.location,
+                      arguments: item.location);
+                },
                 icon: const Icon(Icons.location_on_rounded, size: 18),
                 label: const Text('Lihat Lokasi',
                     style:

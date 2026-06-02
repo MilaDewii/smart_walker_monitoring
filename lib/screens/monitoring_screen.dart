@@ -5,7 +5,6 @@ import 'package:latlong2/latlong.dart';
 import '../utils/app_routes.dart';
 import '../utils/app_colors.dart';
 
-
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
 
@@ -20,6 +19,44 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   final int _langkah = 1200;
   final bool _jatuh = false;
   final LatLng _posisiLansia = LatLng(-7.0051, 110.4381);
+  // --- Simple event model for local search within this single-user screen
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
+  final List<Map<String, String>> _events = [
+    {
+      'id': 'e1',
+      'title': 'Anomali Gerakan',
+      'description': 'Perubahan pola gerak tidak biasa terdeteksi',
+      'time': '10:47',
+      'date': '2025-04-08'
+    },
+    {
+      'id': 'e2',
+      'title': 'Potensi Jatuh',
+      'description': 'Sensor mendeteksi benturan dan penurunan akselerasi',
+      'time': '11:00',
+      'date': '2025-04-08'
+    },
+    {
+      'id': 'e3',
+      'title': 'Update Lokasi',
+      'description': 'Lansia bergerak ke koordinat baru',
+      'time': '11:05',
+      'date': '2025-04-08'
+    },
+  ];
+
+  List<Map<String, String>> get _filteredEvents {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return _events;
+    return _events.where((e) {
+      return e['title']!.toLowerCase().contains(q) ||
+          e['description']!.toLowerCase().contains(q) ||
+          (e['time'] ?? '').toLowerCase().contains(q) ||
+          (e['date'] ?? '').toLowerCase().contains(q);
+    }).toList();
+  }
 
   Color get _statusColor {
     switch (_status) {
@@ -131,19 +168,26 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                       const SizedBox(height: 12),
                       _buildPeta(),
                       const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          children: [
-                            _buildAktivitas(),
-                            const SizedBox(height: 12),
-                            _buildResikoJatuh(),
-                            const SizedBox(height: 12),
-                            _buildStatusSensor(),
-                            const SizedBox(height: 24),
-                          ],
+                      // If user typed a search query, show matching events/results
+                      if (_searchQuery.trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _buildSearchResults(),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              _buildAktivitas(),
+                              const SizedBox(height: 12),
+                              _buildResikoJatuh(),
+                              const SizedBox(height: 12),
+                              _buildStatusSensor(),
+                              const SizedBox(height: 24),
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -167,7 +211,6 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
               // Foto profil - bisa diklik ke profile screen
               GestureDetector(
                 onTap: () {
-                  // TODO: nanti arahkan ke profile_screen.dart
                   // Navigator.pushNamed(context, AppRoutes.profile);
                 },
                 child: CircleAvatar(
@@ -230,10 +273,10 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          // Search bar
+          // Search bar for single-user logs/events
           Container(
             height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
@@ -241,12 +284,33 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             ),
             child: Row(
               children: [
+                const SizedBox(width: 6),
                 Icon(Icons.search, color: AppColors.textGrey, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  'Search...',
-                  style: TextStyle(color: AppColors.textGrey, fontSize: 13),
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textDark), // <-- ukuran teks input
+                    decoration: InputDecoration(
+                      hintText: 'Cari kejadian, waktu, atau keterangan...',
+                      hintStyle:
+                          TextStyle(fontSize: 13, color: AppColors.textGrey),
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                  ),
                 ),
+                if (_searchQuery.isNotEmpty)
+                  IconButton(
+                    icon: Icon(Icons.clear, color: AppColors.textGrey),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  ),
               ],
             ),
           ),
@@ -403,7 +467,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                     TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                           userAgentPackageName: 'com.guardianwalk.app',
+                      userAgentPackageName: 'com.guardianwalk.app',
                     ),
                     CircleLayer(
                       circles: [
@@ -475,10 +539,8 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushReplacementNamed(
-                        context, AppRoutes.location);
+                    Navigator.pushReplacementNamed(context, AppRoutes.location);
                   },
-                  
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     shape: RoundedRectangleBorder(
@@ -644,5 +706,48 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
       ),
       child: child,
     );
+  }
+
+  Widget _buildSearchResults() {
+    final results = _filteredEvents;
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Hasil Pencarian',
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark)),
+          const SizedBox(height: 8),
+          if (results.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text('Tidak ada hasil untuk "$_searchQuery"',
+                  style: TextStyle(color: AppColors.textGrey)),
+            )
+          else
+            ...results.map((e) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(e['title'] ?? ''),
+                  subtitle:
+                      Text('${e['date']} • ${e['time']}\n${e['description']}'),
+                  isThreeLine: true,
+                  onTap: () {
+                    // For now, just show a simple snackbar; could open detail view
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Buka: ${e['title']}'),
+                    ));
+                  },
+                ))
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 }

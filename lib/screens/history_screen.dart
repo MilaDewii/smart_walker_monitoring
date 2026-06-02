@@ -2038,6 +2038,8 @@ class _SensorChartPainter extends CustomPainter {
 // ============================================================
 // MAP GRID PAINTER
 // ============================================================
+// ignore: unused_element
+// ignore: unused_element
 class _MapGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
