@@ -1,8 +1,8 @@
-name: smart_walker_app
+name: GuardianWalk
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -30,15 +30,27 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  flutter_svg: ^2.0.9
+  font_awesome_flutter: ^10.7.0
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
+  image_picker: ^1.0.7
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  firebase_core: ^4.10.0
+  firebase_database: ^12.4.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo/logo.png"
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -52,6 +64,20 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  assets:
+    - assets/images/Guardian.svg
+    - assets/images/org ijo.png
+    - assets/images/org kuning.svg
+    - assets/images/org merah.png
+    - assets/images/jatuh ijo.svg
+    - assets/images/jatuh kuning.png
+    - assets/images/jatuh merah.png
+    - assets/images/graf ijo.png
+    - assets/images/graf kuning.svg
+    - assets/images/graf merah.png
+    - assets/images/peringatan ijo.svg
+    - assets/images/peringatan kuning.png
+    - assets/images/peringatan merah.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
