@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "810111252474",
+    "project_id": "smartwalker-3480e",
+    "storage_bucket": "smartwalker-3480e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:810111252474:android:66c07d2be506d4e21ed643",
+        "android_client_info": {
+          "package_name": "com.example.smart_walker_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDxNllqwM7Kt7jXC_E0nYDh8YB-zxtSssM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
