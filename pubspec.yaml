@@ -44,6 +44,7 @@ dependencies:
   firebase_core: ^4.10.0
   firebase_database: ^12.4.2
   shared_preferences: ^2.5.3
+  mobile_scanner: ^7.0.1
 
 dev_dependencies:
   flutter_test:
