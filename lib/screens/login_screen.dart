@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
+import '../database/database_helper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +16,48 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _ingatSaya = false;
+
+  Future<void> login() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email dan password wajib diisi'),
+        ),
+      );
+
+      return;
+    }
+
+    final user = await DatabaseHelper.instance.loginUser(
+  _emailController.text,
+  _passwordController.text,
+);
+
+if (user == null) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Email atau password salah'),
+    ),
+  );
+  return;
+}
+
+// simpan session login
+await DatabaseHelper.instance.saveLoginSession(
+  userId: user['id'].toString(),
+  email: user['email'],
+);
+
+final session =
+    await DatabaseHelper.instance.getLoginSession();
+
+print(session);
+
+Navigator.pushReplacementNamed(
+  context,
+  AppRoutes.connectWalker,
+);
+}
 
   @override
   void dispose() {
@@ -182,8 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushReplacementNamed(
-                        context, AppRoutes.connectWalker);
+                    login();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,

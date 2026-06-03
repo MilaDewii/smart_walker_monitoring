@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
-
+import 'database/database_helper.dart';
 import 'utils/app_colors.dart';
 import 'utils/app_routes.dart';
 import 'screens/splash_screen.dart';
@@ -20,6 +20,11 @@ Future<void> main() async {
 
   await Firebase.initializeApp();
   print('Firebase initialized successfully');
+
+  // Inisialisasi SQLite
+  await DatabaseHelper.instance.database;
+  // await DatabaseHelper.instance.logout();
+  await DatabaseHelper.instance.checkTables();
 
   FirebaseDatabase.instance.ref('.info/connected').onValue.listen((event) {
     final isConnected = event.snapshot.value == true;
@@ -46,8 +51,8 @@ class MyApp extends StatelessWidget {
       initialRoute: AppRoutes.splash,
       routes: {
         AppRoutes.splash: (context) => const SplashScreen(),
-        AppRoutes.login: (context) => const LoginScreen(),
         AppRoutes.register: (context) => const RegisterScreen(),
+        AppRoutes.login: (context) => const LoginScreen(),
         AppRoutes.monitoring: (context) => const MainNavigation(),
         AppRoutes.onboarding: (context) => const OnboardingScreen(),
         AppRoutes.notification: (context) => const NotificationScreen(),
