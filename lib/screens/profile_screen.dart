@@ -537,144 +537,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── INFORMASI DEVICE WALKER ──────────────────────────
-  Widget _buildInfoWalker() {
-    final bool isConnected = _statusDevice == 'Connected';
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionTitle('Device Walker', Icons.directions_walk),
-          const SizedBox(height: 12),
+ // ── INFORMASI DEVICE WALKER ──────────────────────────
+Widget _buildInfoWalker() {
+  final bool isConnected = _statusDevice == 'Connected';
+  return _buildCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('Device Walker', Icons.directions_walk),
+        const SizedBox(height: 12),
 
-          // Walker ID
-          _buildInfoRow(Icons.qr_code_2, 'Walker ID', _walkerId),
-          _buildDivider(),
+        _buildInfoRow(Icons.qr_code_2, 'Walker ID', _walkerId),
+        _buildDivider(),
 
-          // Status Device
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                Icon(Icons.wifi_tethering, color: AppColors.textGrey, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text('Status Device',
-                      style:
-                          TextStyle(fontSize: 13, color: AppColors.textGrey)),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: (isConnected
-                            ? AppColors.statusGreen
-                            : AppColors.statusRed)
-                        .withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isConnected
-                              ? AppColors.statusGreen
-                              : AppColors.statusRed,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(_statusDevice,
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: isConnected
-                                  ? AppColors.statusGreen
-                                  : AppColors.statusRed)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _buildDivider(),
-
-          // Battery
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                Icon(Icons.battery_charging_full,
-                    color: _batteryColor(_battery), size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Battery',
-                              style: TextStyle(
-                                  fontSize: 13, color: AppColors.textGrey)),
-                          Text('$_battery%',
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _batteryColor(_battery))),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: _battery / 100,
-                          minHeight: 6,
-                          backgroundColor: Colors.grey.shade200,
-                          color: _batteryColor(_battery),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _batteryColor(int pct) {
-    if (pct >= 60) return AppColors.statusGreen;
-    if (pct >= 30) return AppColors.statusYellow;
-    return AppColors.statusRed;
-  }
-
-// ── STATUS KONEKSI ───────────────────────────────────
-  Widget _buildStatusKoneksi() {
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionTitle('Status Koneksi', Icons.signal_cellular_alt),
-          const SizedBox(height: 12),
-          Row(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
             children: [
-              _buildKoneksiChip(Icons.signal_cellular_alt, 'GSM Network', _gsm),
-              const SizedBox(width: 8),
-              _buildKoneksiChip(Icons.gps_fixed, 'GPS', _gps),
-              const SizedBox(width: 8),
-              _buildKoneksiChip(Icons.cloud_done, 'Firebase RTD', _firebaseRtd),
+              Icon(Icons.wifi_tethering, color: AppColors.textGrey, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('Status Device',
+                    style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (isConnected ? AppColors.statusGreen : AppColors.statusRed)
+                      .withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isConnected ? AppColors.statusGreen : AppColors.statusRed,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(_statusDevice,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isConnected
+                                ? AppColors.statusGreen
+                                : AppColors.statusRed)),
+                  ],
+                ),
+              ),
             ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+} // 
+
+// ── STATUS KONEKSI ───────────────────────────────────  ✅ Sekarang di luar _buildInfoWalker
+Widget _buildStatusKoneksi() {
+  return _buildCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('Status Koneksi', Icons.signal_cellular_alt),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _buildKoneksiChip(Icons.signal_cellular_alt, 'GSM Network', _gsm),
+            const SizedBox(width: 8),
+            _buildKoneksiChip(Icons.gps_fixed, 'GPS', _gps),
+            const SizedBox(width: 8),
+            _buildKoneksiChip(Icons.cloud_done, 'Firebase RTD', _firebaseRtd),
+          ],
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildKoneksiChip(IconData icon, String label, bool aktif) {
     return Expanded(

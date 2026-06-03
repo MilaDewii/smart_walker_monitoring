@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/app_routes.dart';
 import '../utils/app_colors.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
@@ -15,13 +16,87 @@ class MonitoringScreen extends StatefulWidget {
 class _MonitoringScreenState extends State<MonitoringScreen> {
   String _status = 'aman';
 
-  final String _namaLansia = 'Nama Lansia';
-  final int _langkah = 1200;
-  final bool _jatuh = false;
-  final LatLng _posisiLansia = LatLng(-7.0051, 110.4381);
+  String _namaLansia = 'Nama Lansia';
+  int _langkah = 0;
+  bool _jatuh = false;
+
+  LatLng _posisiLansia =
+      LatLng(-7.0051, 110.4381);
+
+  bool _gpsAktif = false;
+  bool _mpuAktif = false;
+  bool _ultrasonicAktif = false;
   // --- Simple event model for local search within this single-user screen
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+    @override
+  void initState() {
+    super.initState();
+    _listenWalkerData();
+  }
+
+void _listenWalkerData() {
+
+  FirebaseDatabase.instance
+      .ref('walkers/walker_001')
+      .onValue
+      .listen((event) {
+
+    if (event.snapshot.value == null) return;
+
+    final data =
+        Map<dynamic, dynamic>.from(
+            event.snapshot.value as Map);
+
+    setState(() {
+
+      final location =
+          Map<dynamic, dynamic>.from(
+              data['location'] ?? {});
+
+      _posisiLansia = LatLng(
+        (location['latitude'] ?? 0).toDouble(),
+        (location['longitude'] ?? 0).toDouble(),
+      );
+
+      final fall =
+          Map<dynamic, dynamic>.from(
+              data['fall_detection'] ?? {});
+
+      _jatuh =
+          fall['fall_detected'] ?? false;
+
+      final sensors =
+          Map<dynamic, dynamic>.from(
+              data['sensors'] ?? {});
+
+      final sim808 =
+          Map<dynamic, dynamic>.from(
+              sensors['sim808'] ?? {});
+
+      _gpsAktif =
+          sim808['gps_status'] ?? false;
+
+      _mpuAktif =
+          sensors['mpu6050'] != null;
+
+      _ultrasonicAktif =
+          sensors['hcsr04_front'] != null;
+
+      final status =
+          Map<dynamic, dynamic>.from(
+              data['status'] ?? {});
+
+      if (status['fall_detected'] == true) {
+        _status = 'bahaya';
+      } else if (status['anomaly_detected'] == true) {
+        _status = 'peringatan';
+      } else {
+        _status = 'aman';
+      }
+    });
+  });
+}
 
   final List<Map<String, String>> _events = [
     {
@@ -164,7 +239,6 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      _buildStatusBar(),
                       const SizedBox(height: 12),
                       _buildPeta(),
                       const SizedBox(height: 12),
@@ -313,86 +387,6 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── STATUS BAR ────────────────────────────────────────
-  Widget _buildStatusBar() {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: _statusColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _statusText,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _statusSubText,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Tombol ganti status (testing UI)
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onSelected: (val) => setState(() => _status = val),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'aman',
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_outline,
-                        color: AppColors.statusGreen, size: 18),
-                    const SizedBox(width: 8),
-                    const Text('Aman'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'peringatan',
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded,
-                        color: AppColors.statusYellow, size: 18),
-                    const SizedBox(width: 8),
-                    const Text('Peringatan'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'bahaya',
-                child: Row(
-                  children: [
-                    Icon(Icons.dangerous_outlined,
-                        color: AppColors.statusRed, size: 18),
-                    const SizedBox(width: 8),
-                    const Text('Bahaya'),
-                  ],
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -652,11 +646,20 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             style: TextStyle(fontSize: 12, color: AppColors.textGrey),
           ),
           const SizedBox(height: 12),
-          _buildSensorItem('MPU', true),
-          const SizedBox(height: 8),
-          _buildSensorItem('GPS', true),
-          const SizedBox(height: 8),
-          _buildSensorItem('Ultrasonic', false),
+          _buildSensorItem(
+            'MPU',
+            _mpuAktif,
+          ),
+
+          _buildSensorItem(
+            'GPS',
+            _gpsAktif,
+          ),
+
+          _buildSensorItem(
+            'Ultrasonic',
+            _ultrasonicAktif,
+          ),
         ],
       ),
     );
