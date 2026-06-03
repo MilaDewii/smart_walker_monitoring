@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
 import 'package:firebase_database/firebase_database.dart';
+import '../database/database_helper.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -107,8 +108,23 @@ class _SplashScreenState extends State<SplashScreen> {
                           ),
                         );
 
-                        Navigator.pushReplacementNamed(
-                            context, AppRoutes.onboarding);
+                        final session =
+                            await DatabaseHelper.instance.getLoginSession();
+
+                        print("SESSION SPLASH:");
+                        print(session);
+
+                        if (session != null) {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            AppRoutes.connectWalker,
+                          );
+                        } else {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            AppRoutes.onboarding,
+                          );
+                        }
                       }
                     } catch (e) {
                       print("Firebase Error: $e");
