@@ -7,7 +7,7 @@ class NotificationService {
   Future<DataSnapshot> getNotifications(
       String walkerId) async {
     return await _db
-        .child('walkers/$walkerId/notification')
+        .child('Walkers/$walkerId/notification')
         .get();
   }
 
@@ -16,14 +16,14 @@ class NotificationService {
       String notifId) async {
     await _db
         .child(
-            'walkers/$walkerId/notification/$notifId/is_read')
+            'Walkers/$walkerId/notification/$notifId/is_read')
         .set(true);
   }
 
   Future<void> clearNotifications(
       String walkerId) async {
     await _db
-        .child('walkers/$walkerId/notification')
+        .child('Walkers/$walkerId/notification')
         .remove();
   }
 }

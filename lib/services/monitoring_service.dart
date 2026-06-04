@@ -1,12 +1,11 @@
 import 'package:firebase_database/firebase_database.dart';
 
 class MonitoringService {
+  MonitoringService(this.walkerId);
 
-  final DatabaseReference ref =
-      FirebaseDatabase.instance
-          .ref("walkers/walker_001");
+  final String walkerId;
 
   Stream<DatabaseEvent> getData() {
-    return ref.onValue;
+    return FirebaseDatabase.instance.ref('Walkers/$walkerId').onValue;
   }
 }

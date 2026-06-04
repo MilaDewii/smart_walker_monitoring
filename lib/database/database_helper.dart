@@ -385,6 +385,22 @@ CREATE TABLE cache_history(
     );
   }
 
+  Future<Map<String, dynamic>?> getLastPairedWalker() async {
+    final db = await database;
+
+    final result = await db.query(
+      'paired_walker',
+      orderBy: 'id DESC',
+      limit: 1,
+    );
+
+    if (result.isNotEmpty) {
+      return result.first;
+    }
+
+    return null;
+  }
+
   Future<int> updatePairedWalker({
     required int id,
     required String walkerId,

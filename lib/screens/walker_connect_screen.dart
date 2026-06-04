@@ -1,141 +1,135 @@
 import 'package:flutter/material.dart';
-import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
+import '../database/database_helper.dart';
 
-class WalkerConnectScreen extends StatelessWidget {
+class WalkerConnectScreen extends StatefulWidget {
   const WalkerConnectScreen({super.key});
 
   @override
+  State<WalkerConnectScreen> createState() => _WalkerConnectScreenState();
+}
+
+class _WalkerConnectScreenState extends State<WalkerConnectScreen> {
+  String? walkerId;
+  String? connectedAt;
+
+  @override
+  void initState() {
+    super.initState();
+    loadWalker();
+  }
+
+  Future<void> loadWalker() async {
+    final walkers = await DatabaseHelper.instance.getPairedWalkers();
+
+    if (!mounted || walkers.isEmpty) return;
+
+    final walker = walkers.first;
+    setState(() {
+      walkerId = walker['walker_id']?.toString();
+      connectedAt = walker['paired_date']?.toString();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    bool isConnected = walkerId != null;
+
     return Scaffold(
       backgroundColor: const Color(0xFFE8F0FB),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 24),
-
-              // ── Header ──────────────────────────────────
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor:
-                        AppColors.primary.withOpacity(0.12),
-                    child: const Icon(Icons.person_rounded,
-                        color: AppColors.primary, size: 26),
-                  ),
-                  const SizedBox(width: 10),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Haillo, Mia',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textGrey)),
-                      Text('Monitoring Lansia',
-                          style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textDark)),
-                    ],
-                  ),
-                ],
-              ),
-
-              const Spacer(),
-
-              // ── Illustration area ────────────────────────
-              Center(
-                child: Column(
-                  children: [
-                    // Icon
-                    Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        color: AppColors.statusRed.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.bluetooth_disabled_rounded,
-                        size: 48,
-                        color: AppColors.statusRed,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Title
-                    const Text(
-                      'Walker Belum Terhubung',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Subtitle
-                    const Text(
-                      'Hubungkan GuardianWalk untuk mulai\nmonitoring lokasi, aktivitas,\ndan deteksi jatuh secara realtime.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textGrey,
-                        height: 1.6,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 40),
+              if (isConnected) ...[
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 90,
                 ),
-              ),
-
-              const Spacer(),
-
-              // ── Button ──────────────────────────────────
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pushNamed(
-                      context, AppRoutes.qrConnect),
-                  icon: const Icon(Icons.qr_code_scanner_rounded,
-                      size: 20),
-                  label: const Text(
-                    'Hubungkan Walker',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                const SizedBox(height: 20),
+                const Text(
+                  "Walker Terhubung",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-
-              // ── Skip ────────────────────────────────────
-              Center(
-                child: GestureDetector(
-                  onTap: () => Navigator.pushReplacementNamed(
-                      context, AppRoutes.monitoring),
-                  child: const Text(
-                    'Lewati untuk saat ini',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textGrey,
-                      decoration: TextDecoration.underline,
+                const SizedBox(height: 10),
+                Text(
+                  "ID : $walkerId",
+                  style: const TextStyle(
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "Terhubung pada:\n$connectedAt",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.grey,
+                  ),
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pushReplacementNamed(
+                        context,
+                        AppRoutes.monitoring,
+                      );
+                    },
+                    child: const Text(
+                      "Mulai Monitoring",
+                    ),
+                  ),
+                )
+              ] else ...[
+                const Spacer(),
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.bluetooth_disabled,
+                    color: Colors.red,
+                    size: 50,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "Walker Belum Terhubung",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.qrConnect,
+                      );
+                    },
+                    icon: const Icon(Icons.qr_code),
+                    label: const Text(
+                      "Hubungkan Walker",
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 32),
+                const Spacer(),
+              ]
             ],
           ),
         ),

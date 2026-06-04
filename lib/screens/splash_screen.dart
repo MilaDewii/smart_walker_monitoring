@@ -114,15 +114,34 @@ class _SplashScreenState extends State<SplashScreen> {
                         print("SESSION SPLASH:");
                         print(session);
 
-                        if (session != null) {
+                        // belum login
+                        if (session == null) {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            AppRoutes.onboarding,
+                          );
+
+                          return;
+                        }
+
+                        // cek walker pernah dipairing
+                        final pairedWalker =
+                            await DatabaseHelper.instance.getPairedWalkers();
+
+                        print("PAIRED WALKER:");
+                        print(pairedWalker);
+
+                        // login tapi belum scan walker
+                        if (pairedWalker.isEmpty) {
                           Navigator.pushReplacementNamed(
                             context,
                             AppRoutes.connectWalker,
                           );
                         } else {
+                          // login + walker sudah tersambung
                           Navigator.pushReplacementNamed(
                             context,
-                            AppRoutes.onboarding,
+                            AppRoutes.monitoring,
                           );
                         }
                       }

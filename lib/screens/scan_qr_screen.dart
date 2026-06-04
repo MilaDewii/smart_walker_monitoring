@@ -3,21 +3,17 @@ import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/walker_pairing_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../database/database_helper.dart';
 
-// ============================================================
-// COLORS
-// ============================================================
 class _C {
-  static const Color primary   = AppColors.primary;   // #1E3A8A
-  static const Color secondary = AppColors.secondary; // #3B82F6
-  static const Color bgPage    = Color(0xFFE8F0FB);
-  static const Color white     = AppColors.white;
-  static const Color textMid   = AppColors.textGrey;
+  static const Color primary = AppColors.primary;
+  static const Color secondary = AppColors.secondary;
+  static const Color bgPage = Color(0xFFE8F0FB);
+  static const Color white = AppColors.white;
+  static const Color textMid = AppColors.textGrey;
 }
 
-// ============================================================
-// QR CONNECT SCREEN
-// ============================================================
 class QrConnectScreen extends StatefulWidget {
   const QrConnectScreen({super.key});
 
@@ -27,36 +23,30 @@ class QrConnectScreen extends StatefulWidget {
 
 class _QrConnectScreenState extends State<QrConnectScreen>
     with TickerProviderStateMixin {
-
   // ── Controllers ─────────────────────────────────────────
-  final MobileScannerController _scannerController = MobileScannerController();
+  late MobileScannerController _scannerController;
   final WalkerConnectService _connectService = WalkerConnectService();
 
   // ── State ───────────────────────────────────────────────
   String? _walkerId;
   bool _processingQr = false;
-  bool _isScanning   = false;
-  bool _connected    = false;
+  bool _isScanning = false;
+  bool _connected = false;
   String? _errorMessage;
 
   // ── Animation controllers ────────────────────────────────
   late AnimationController _scanLineCtrl;
-  late Animation<double>   _scanLineAnim;
-
+  late Animation<double> _scanLineAnim;
   late AnimationController _pulseCtrl;
-  late Animation<double>   _pulseAnim;
-
+  late Animation<double> _pulseAnim;
   late AnimationController _cornerCtrl;
-  late Animation<double>   _cornerAnim;
+  late Animation<double> _cornerAnim;
 
-  // ============================================================
-  // LIFECYCLE
-  // ============================================================
   @override
   void initState() {
     super.initState();
+    _scannerController = MobileScannerController(autoStart: false);
 
-    // Scan line animasi naik turun
     _scanLineCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -65,7 +55,6 @@ class _QrConnectScreenState extends State<QrConnectScreen>
       CurvedAnimation(parent: _scanLineCtrl, curve: Curves.easeInOut),
     );
 
-    // Pulse pada lingkaran
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -74,7 +63,6 @@ class _QrConnectScreenState extends State<QrConnectScreen>
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
 
-    // Corner fade-in
     _cornerCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -92,63 +80,97 @@ class _QrConnectScreenState extends State<QrConnectScreen>
     super.dispose();
   }
 
-  // ============================================================
-  // LOGIC
-  // ============================================================
-
-  /// Dipanggil saat scanner mendeteksi QR code.
   void _onQrDetected(BarcodeCapture capture) async {
-    // Guard: skip kalau sedang proses atau sudah connected
     if (_processingQr || _connected) return;
-
     final barcode = capture.barcodes.firstOrNull;
     if (barcode?.rawValue == null) return;
 
     final scannedId = barcode!.rawValue!.trim();
 
+    if (scannedId.startsWith("http")) {
+      setState(() {
+        _errorMessage = "QR bukan ID Walker";
+        _processingQr = false;
+        _isScanning = false;
+      });
+
+      return;
+    }
+    await _scannerController.stop();
+
     setState(() {
       _processingQr = true;
-      _isScanning   = true;
+      _isScanning = true;
       _errorMessage = null;
     });
 
     _scanLineCtrl.repeat(reverse: true);
-
-    // Validasi ke Firebase + simpan SQLite via service
     final result = await _connectService.connectWalker(scannedId);
 
     if (!mounted) return;
     _scanLineCtrl.stop();
 
     if (result.success) {
+      // SIMPAN WALKER YANG SUDAH TERHUBUNG
+      await DatabaseHelper.instance.savePairedWalker(
+        walkerId: result.walkerId!,
+        pairedDate: DateTime.now().toString(),
+      );
       setState(() {
-        _walkerId     = result.walkerId;
-        _isScanning   = false;
-        _connected    = true;
+        _walkerId = result.walkerId;
+        _isScanning = false;
+        _connected = true;
         _processingQr = false;
         _errorMessage = null;
       });
     } else {
       setState(() {
-        _isScanning   = false;
+        _isScanning = false;
         _processingQr = false;
         _errorMessage = result.errorMessage;
       });
 
-      // Otomatis reset error setelah 3 detik → siap scan ulang
       Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) setState(() => _errorMessage = null);
+        if (mounted) {
+          setState(() => _errorMessage = null);
+          _startScan();
+        }
       });
     }
   }
 
-  /// Mulai scan secara manual (tombol "Mulai Scan")
-  void _startScan() {
+  /// Mulai scan manual
+  Future<void> _startScan() async {
+    final status = await Permission.camera.request();
+
+    if (!status.isGranted) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Izin kamera ditolak')),
+      );
+      return;
+    }
+
     setState(() {
-      _isScanning   = true;
+      _isScanning = true;
       _errorMessage = null;
     });
     _scanLineCtrl.repeat(reverse: true);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      try {
+        await _scannerController.start(cameraDirection: CameraFacing.back);
+      } catch (e) {
+        if (!mounted) return;
+        _scanLineCtrl.stop();
+        setState(() {
+          _isScanning = false;
+          _errorMessage = 'Kamera gagal dibuka: $e';
+        });
+      }
+    });
   }
 
   void _goToHome() {
@@ -179,7 +201,6 @@ class _QrConnectScreenState extends State<QrConnectScreen>
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
       child: Column(
         children: [
-          // Logo + nama app
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -245,7 +266,6 @@ class _QrConnectScreenState extends State<QrConnectScreen>
           children: [
             _buildQrBox(),
             const SizedBox(height: 12),
-            // Error message
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
               child: _errorMessage != null
@@ -371,16 +391,11 @@ class _QrConnectScreenState extends State<QrConnectScreen>
                           ),
                         ),
 
-                        // Camera / connected state
+                        // Camera / connected state (SEKARANG SUDAH DIHUBUNGKAN)
                         Center(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 500),
-                            child: _connected
-                                ? _buildConnectedCenter()
-                                : _isScanning
-                                    ? _buildCameraView()
-                                    : _buildQrPlaceholder(),
-                          ),
+                          child: _connected
+                              ? _buildConnectedCenter()
+                              : _buildCameraView(),
                         ),
 
                         // Scan line (overlay di atas kamera)
@@ -447,16 +462,39 @@ class _QrConnectScreenState extends State<QrConnectScreen>
 
   // ── Camera View ──────────────────────────────────────────
   Widget _buildCameraView() {
-    return ClipRRect(
-      key: const ValueKey('camera'),
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        width: 220,
-        height: 220,
-        child: MobileScanner(
-          controller: _scannerController,
-          onDetect: _onQrDetected,
-        ),
+    return SizedBox(
+      width: 220,
+      height: 220,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: _isScanning
+            ? MobileScanner(
+                key: const ValueKey(
+                    'qr_camera_active'), // Key unik memaksa render ulang yang bersih
+                controller: _scannerController,
+                onDetect: _onQrDetected,
+                errorBuilder: (context, error, child) {
+                  return Container(
+                    color: _C.bgPage,
+                    padding: const EdgeInsets.all(14),
+                    child: Center(
+                      child: Text(
+                        'Kamera gagal dibuka\n${error.errorCode}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppColors.statusRed,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              )
+            : Container(
+                color: _C.bgPage,
+                child: Center(child: _buildQrPlaceholder()),
+              ),
       ),
     );
   }
@@ -554,9 +592,9 @@ class _QrConnectScreenState extends State<QrConnectScreen>
 
   // Empat sudut bracket
   List<Widget> _buildCorners() {
-    const double size  = 22;
+    const double size = 22;
     const double thick = 3.5;
-    final Color color  = _isScanning ? _C.secondary : _C.primary;
+    final Color color = _isScanning ? _C.secondary : _C.primary;
 
     Widget corner({
       required AlignmentGeometry alignment,
@@ -578,14 +616,14 @@ class _QrConnectScreenState extends State<QrConnectScreen>
       corner(
         alignment: Alignment.topLeft,
         border: Border(
-          top:  BorderSide(color: color, width: thick),
+          top: BorderSide(color: color, width: thick),
           left: BorderSide(color: color, width: thick),
         ),
       ),
       corner(
         alignment: Alignment.topRight,
         border: Border(
-          top:   BorderSide(color: color, width: thick),
+          top: BorderSide(color: color, width: thick),
           right: BorderSide(color: color, width: thick),
         ),
       ),
@@ -593,14 +631,14 @@ class _QrConnectScreenState extends State<QrConnectScreen>
         alignment: Alignment.bottomLeft,
         border: Border(
           bottom: BorderSide(color: color, width: thick),
-          left:   BorderSide(color: color, width: thick),
+          left: BorderSide(color: color, width: thick),
         ),
       ),
       corner(
         alignment: Alignment.bottomRight,
         border: Border(
           bottom: BorderSide(color: color, width: thick),
-          right:  BorderSide(color: color, width: thick),
+          right: BorderSide(color: color, width: thick),
         ),
       ),
     ];

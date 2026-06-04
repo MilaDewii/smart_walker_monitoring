@@ -20,7 +20,7 @@ class WalkerConnectService {
   Future<WalkerConnectResult> connectWalker(String walkerId) async {
     try {
       // 1. Cek apakah walker_id exist di Firebase
-      final ref = _db.ref('walkers/$walkerId');
+      final ref = _db.ref('Walkers/$walkerId');
       final snapshot = await ref.get();
 
       if (!snapshot.exists) {
@@ -31,7 +31,7 @@ class WalkerConnectService {
       }
 
       // 2. (Opsional) cek status connected
-      final statusSnap = await _db.ref('walkers/$walkerId/status/connected').get();
+      final statusSnap = await _db.ref('Walkers/$walkerId/status/connected').get();
       final isConnected = statusSnap.value == true;
       if (!isConnected) {
         return WalkerConnectResult(

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
+import '../database/database_helper.dart';
 import '../utils/app_routes.dart';
 import '../utils/app_colors.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -19,9 +22,10 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   String _namaLansia = 'Nama Lansia';
   int _langkah = 0;
   bool _jatuh = false;
+  String? _walkerId;
+  StreamSubscription<DatabaseEvent>? _walkerSubscription;
 
-  LatLng _posisiLansia =
-      LatLng(-7.0051, 110.4381);
+  LatLng _posisiLansia = LatLng(-7.0051, 110.4381);
 
   bool _gpsAktif = false;
   bool _mpuAktif = false;
@@ -29,74 +33,83 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   // --- Simple event model for local search within this single-user screen
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
-    @override
+  @override
   void initState() {
     super.initState();
-    _listenWalkerData();
+    _initMonitoringData();
   }
 
-void _listenWalkerData() {
+  Future<void> _initMonitoringData() async {
+    final profile = await DatabaseHelper.instance.getProfile();
+    final pairedWalkers = await DatabaseHelper.instance.getPairedWalkers();
 
-  FirebaseDatabase.instance
-      .ref('walkers/walker_001')
-      .onValue
-      .listen((event) {
-
-    if (event.snapshot.value == null) return;
-
-    final data =
-        Map<dynamic, dynamic>.from(
-            event.snapshot.value as Map);
+    if (!mounted) return;
 
     setState(() {
-
-      final location =
-          Map<dynamic, dynamic>.from(
-              data['location'] ?? {});
-
-      _posisiLansia = LatLng(
-        (location['latitude'] ?? 0).toDouble(),
-        (location['longitude'] ?? 0).toDouble(),
-      );
-
-      final fall =
-          Map<dynamic, dynamic>.from(
-              data['fall_detection'] ?? {});
-
-      _jatuh =
-          fall['fall_detected'] ?? false;
-
-      final sensors =
-          Map<dynamic, dynamic>.from(
-              data['sensors'] ?? {});
-
-      final sim808 =
-          Map<dynamic, dynamic>.from(
-              sensors['sim808'] ?? {});
-
-      _gpsAktif =
-          sim808['gps_status'] ?? false;
-
-      _mpuAktif =
-          sensors['mpu6050'] != null;
-
-      _ultrasonicAktif =
-          sensors['hcsr04_front'] != null;
-
-      final status =
-          Map<dynamic, dynamic>.from(
-              data['status'] ?? {});
-
-      if (status['fall_detected'] == true) {
-        _status = 'bahaya';
-      } else if (status['anomaly_detected'] == true) {
-        _status = 'peringatan';
-      } else {
-        _status = 'aman';
-      }
+      _namaLansia = profile?['nama_lansia']?.toString() ?? _namaLansia;
+      _walkerId = pairedWalkers.isNotEmpty
+          ? pairedWalkers.first['walker_id']?.toString()
+          : null;
     });
-  });
-}
+
+    if (_walkerId == null || _walkerId!.isEmpty) return;
+
+    _listenWalkerData(_walkerId!);
+  }
+
+  void _listenWalkerData(String walkerId) {
+    _walkerSubscription?.cancel();
+    _walkerSubscription = FirebaseDatabase.instance
+        .ref('Walkers/$walkerId')
+        .onValue
+        .listen((event) {
+      if (!mounted || event.snapshot.value == null) return;
+
+      final value = event.snapshot.value;
+      if (value is! Map) return;
+
+      final data = Map<dynamic, dynamic>.from(value);
+
+      setState(() {
+        final location = Map<dynamic, dynamic>.from(data['location'] ?? {});
+
+        _posisiLansia = LatLng(
+          _toDouble(location['latitude'], _posisiLansia.latitude),
+          _toDouble(location['longitude'], _posisiLansia.longitude),
+        );
+
+        final fall = Map<dynamic, dynamic>.from(data['fall_detection'] ?? {});
+
+        _jatuh = fall['fall_detected'] ?? false;
+
+        final sensors = Map<dynamic, dynamic>.from(data['sensors'] ?? {});
+
+        final sim808 = Map<dynamic, dynamic>.from(sensors['sim808'] ?? {});
+
+        _gpsAktif = sim808['gps_status'] ?? false;
+
+        _mpuAktif = sensors['mpu6050'] != null;
+
+        _ultrasonicAktif = sensors['hcsr04_front'] != null;
+
+        final status = Map<dynamic, dynamic>.from(data['status'] ?? {});
+
+        if (status['fall_detected'] == true) {
+          _status = 'bahaya';
+        } else if (status['anomaly_detected'] == true) {
+          _status = 'peringatan';
+        } else {
+          _status = 'aman';
+        }
+      });
+    });
+  }
+
+  double _toDouble(dynamic value, double fallback) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? fallback;
+    return fallback;
+  }
 
   final List<Map<String, String>> _events = [
     {
@@ -650,12 +663,10 @@ void _listenWalkerData() {
             'MPU',
             _mpuAktif,
           ),
-
           _buildSensorItem(
             'GPS',
             _gpsAktif,
           ),
-
           _buildSensorItem(
             'Ultrasonic',
             _ultrasonicAktif,
@@ -750,6 +761,7 @@ void _listenWalkerData() {
 
   @override
   void dispose() {
+    _walkerSubscription?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
