@@ -1,16 +1,13 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:latlong2/latlong.dart';
-
 import '../database/database_helper.dart';
 import '../models/walker_data.dart';
 import '../services/monitoring_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
+import 'widgets/location_card.dart';
 
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
@@ -20,7 +17,7 @@ class MonitoringScreen extends StatefulWidget {
 }
 
 class _MonitoringScreenState extends State<MonitoringScreen> {
-  // ── Data ──────────────────────────────────
+  // ── Data ───────────────────────────────────────────────────────────────────
   String _namaUser = 'User';
   String _namaLansia = 'Nama Lansia';
   File? _fotoFile;
@@ -29,11 +26,11 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
 
   StreamSubscription<WalkerData>? _walkerSub;
 
-  // ── Search ────────────────────────────────
+  // ── Search ─────────────────────────────────────────────────────────────────
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
-  // ── Events lokal ──────────────────────────
+  // ── Events lokal ───────────────────────────────────────────────────────────
   final List<Map<String, String>> _events = [
     {
       'id': 'e1',
@@ -58,7 +55,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     },
   ];
 
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   @override
   void initState() {
     super.initState();
@@ -77,7 +74,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
 
     setState(() {
       _namaLansia = profile?['nama_lansia']?.toString() ?? _namaLansia;
-      _namaUser = profile?['nama']?.toString() ?? 'User'; // tambahkan ini
+      _namaUser = profile?['nama']?.toString() ?? 'User';
       _walkerId = walkerId;
 
       final fotoPath = profile?['foto']?.toString() ?? '';
@@ -90,6 +87,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
 
     if (walkerId == null || walkerId.isEmpty) return;
 
+    _walkerSub?.cancel(); // pastikan tidak double subscribe
     _walkerSub =
         MonitoringService.instance.watchWalker(walkerId).listen((data) {
       if (!mounted) return;
@@ -104,25 +102,21 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     super.dispose();
   }
 
-  // ═══════════════════════════════════════════
-  // GETTER dari WalkerData
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GETTER
+  // ═══════════════════════════════════════════════════════════════════════════
   String get _status => _walkerData.status;
   bool get _jatuh => _walkerData.jatuh;
   double get _confidence => _walkerData.fallConfidence;
   double get _impact => _walkerData.fallImpact;
-  LatLng get _posisi => _walkerData.position;
-  bool get _gpsAktif => _walkerData.gpsAktif;
   bool get _mpuAktif => _walkerData.mpuAktif;
+  bool get _gpsAktif => _walkerData.gpsAktif;
   bool get _ultraFront => _walkerData.ultrasonicFront;
   bool get _ultraBack => _walkerData.ultrasonicBack;
   bool get _walkerActive => _walkerData.walkerActive;
   String get _geofence => _walkerData.geofenceStatus;
-  double get _geofenceRadius => _walkerData.geofenceRadius;
-  LatLng get _geofenceCenter => _walkerData.geofenceCenter;
   String get _lastUpdate => _walkerData.lastUpdate;
 
-  // ── Status helpers ────────────────────────
   Color get _statusColor {
     switch (_status) {
       case 'bahaya':
@@ -134,13 +128,10 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     }
   }
 
-  String get _geofenceBadgeLabel =>
-      _geofence == 'inside' ? 'Area Aman' : 'Di Luar Area!';
-
   Color get _geofenceBadgeColor =>
       _geofence == 'inside' ? AppColors.statusGreen : AppColors.statusRed;
 
-  // ── Asset helpers ─────────────────────────
+  // ── Asset helpers ──────────────────────────────────────────────────────────
   String get _asetOrang {
     switch (_status) {
       case 'bahaya':
@@ -192,7 +183,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     return Image.asset(path, width: size, height: size);
   }
 
-  // ── Search filter ─────────────────────────
+  // ── Search ─────────────────────────────────────────────────────────────────
   List<Map<String, String>> get _filteredEvents {
     final q = _searchQuery.trim().toLowerCase();
     if (q.isEmpty) return _events;
@@ -207,9 +198,9 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
         .toList();
   }
 
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // BUILD
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -231,7 +222,14 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   child: Column(
                     children: [
                       const SizedBox(height: 12),
-                      _buildPeta(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: LocationCard(
+                          walkerData: _walkerData,
+                          walkerId: _walkerId,
+                          parentContext: context,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -259,9 +257,9 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     );
   }
 
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // HEADER
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -270,6 +268,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
         children: [
           Row(
             children: [
+              // Avatar
               CircleAvatar(
                 radius: 24,
                 backgroundColor: AppColors.primary.withOpacity(0.15),
@@ -277,7 +276,9 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                     _fotoFile != null ? FileImage(_fotoFile!) : null,
                 child: _fotoFile == null
                     ? Text(
-                        _namaUser.isNotEmpty ? _namaUser[0].toUpperCase() : '?',
+                        _namaUser.isNotEmpty
+                            ? _namaUser[0].toUpperCase()
+                            : '?',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -291,9 +292,11 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Hallo, $_namaUser',
-                        style:
-                            TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                    Text(
+                      'Hallo, $_namaUser',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.textGrey),
+                    ),
                     Text(
                       'Monitoring $_namaLansia',
                       style: TextStyle(
@@ -305,45 +308,8 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   ],
                 ),
               ),
-              // Badge walker aktif/offline
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (_walkerActive
-                          ? AppColors.statusGreen
-                          : AppColors.statusRed)
-                      .withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _walkerActive
-                            ? AppColors.statusGreen
-                            : AppColors.statusRed,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _walkerActive ? 'Aktif' : 'Offline',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: _walkerActive
-                            ? AppColors.statusGreen
-                            : AppColors.statusRed,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Tombol notifikasi
+              _walkerStatusBadge(),
+              const SizedBox(width: 8),
               Container(
                 width: 44,
                 height: 44,
@@ -380,23 +346,24 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   child: TextField(
                     controller: _searchCtrl,
                     onChanged: (v) => setState(() => _searchQuery = v),
-                    style: TextStyle(fontSize: 13, color: AppColors.textDark),
+                    style: TextStyle(
+                        fontSize: 13, color: AppColors.textDark),
                     decoration: InputDecoration(
                       hintText: 'Cari kejadian, waktu, atau keterangan...',
-                      hintStyle:
-                          TextStyle(fontSize: 13, color: AppColors.textGrey),
+                      hintStyle: TextStyle(
+                          fontSize: 13, color: AppColors.textGrey),
                       border: InputBorder.none,
                       isDense: true,
                     ),
                   ),
                 ),
                 if (_searchQuery.isNotEmpty)
-                  IconButton(
-                    icon: Icon(Icons.clear, color: AppColors.textGrey),
-                    onPressed: () {
+                  GestureDetector(
+                    onTap: () {
                       _searchCtrl.clear();
                       setState(() => _searchQuery = '');
                     },
+                    child: Icon(Icons.clear, color: AppColors.textGrey),
                   ),
               ],
             ),
@@ -406,185 +373,48 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     );
   }
 
-  // ═══════════════════════════════════════════
-  // PETA
-  // ═══════════════════════════════════════════
-  Widget _buildPeta() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Title + geofence badge ─────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
-                children: [
-                  Text('Lokasi Lansia',
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark)),
-                  const Spacer(),
-                  // Badge dinamis dari RTD geofence.status
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _geofenceBadgeColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      _geofenceBadgeLabel,
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: _geofenceBadgeColor,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
+  Widget _walkerStatusBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: (_walkerActive
+                ? AppColors.statusGreen
+                : AppColors.statusRed)
+            .withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _walkerActive
+                  ? AppColors.statusGreen
+                  : AppColors.statusRed,
             ),
-
-            // ── Peta ──────────────────────────────
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(12),
-                  bottomRight: Radius.circular(12)),
-              child: SizedBox(
-                height: 180,
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: _posisi,
-                    initialZoom: 15,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.guardianwalk.app',
-                    ),
-                    // Geofence circle — center & radius dari RTD
-                    CircleLayer(circles: [
-                      CircleMarker(
-                        point: _geofenceCenter,
-                        radius: _geofenceRadius,
-                        color: _geofenceBadgeColor.withOpacity(0.12),
-                        borderColor: _geofenceBadgeColor,
-                        borderStrokeWidth: 2,
-                        useRadiusInMeter: true,
-                      ),
-                    ]),
-                    // Marker posisi lansia
-                    MarkerLayer(markers: [
-                      Marker(
-                        point: _posisi,
-                        width: 40,
-                        height: 40,
-                        child: Icon(Icons.location_pin,
-                            color: _statusColor, size: 40),
-                      ),
-                    ]),
-                  ],
-                ),
-              ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            _walkerActive ? 'Aktif' : 'Offline',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: _walkerActive
+                  ? AppColors.statusGreen
+                  : AppColors.statusRed,
             ),
-
-            // ── Koordinat ─────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Lat: ${_posisi.latitude.toStringAsFixed(5)}'
-                      '   Lng: ${_posisi.longitude.toStringAsFixed(5)}',
-                      style: TextStyle(fontSize: 11, color: AppColors.textGrey),
-                    ),
-                  ),
-                  // Badge koneksi walker
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: (_walkerId != null
-                              ? AppColors.statusGreen
-                              : AppColors.statusRed)
-                          .withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _walkerId != null ? 'Terhubung' : 'Tidak Terhubung',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: _walkerId != null
-                            ? AppColors.statusGreen
-                            : AppColors.statusRed,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Last update ───────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-              child: Row(
-                children: [
-                  Icon(Icons.access_time_rounded,
-                      size: 12, color: AppColors.textGrey),
-                  const SizedBox(width: 4),
-                  Text('Update: $_lastUpdate',
-                      style:
-                          TextStyle(fontSize: 10, color: AppColors.textGrey)),
-                ],
-              ),
-            ),
-
-            // ── Tombol Lihat Lokasi ───────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pushReplacementNamed(
-                      context, AppRoutes.location),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                  child: const Text('Lihat Lokasi',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // AKTIVITAS
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildAktivitas() {
     return _buildCard(
       child: Row(
@@ -595,13 +425,19 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Aktivitas',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark)),
-                Text('${_walkerData.langkah} langkah hari ini',
-                    style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                Text(
+                  'Aktivitas',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                Text(
+                  '${_walkerData.langkah} langkah hari ini',
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.textGrey),
+                ),
               ],
             ),
           ),
@@ -611,9 +447,9 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     );
   }
 
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // RESIKO JATUH
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildResikoJatuh() {
     return _buildCard(
       child: Row(
@@ -624,11 +460,14 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Resiko Jatuh',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark)),
+                Text(
+                  'Resiko Jatuh',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
                 Text(
                   _jatuh
                       ? 'Jatuh Terdeteksi!'
@@ -646,11 +485,11 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                // Confidence & impact dari RTD fall_detecion
                 Text(
                   'Confidence: ${(_confidence * 100).toStringAsFixed(0)}%'
                   '  •  Impact: ${_impact.toStringAsFixed(1)}',
-                  style: TextStyle(fontSize: 11, color: AppColors.textGrey),
+                  style: TextStyle(
+                      fontSize: 11, color: AppColors.textGrey),
                 ),
               ],
             ),
@@ -661,21 +500,26 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     );
   }
 
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // STATUS SENSOR
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildStatusSensor() {
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Status Sensor',
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark)),
-          Text('Sensor yang sedang aktif',
-              style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+          Text(
+            'Status Sensor',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
+          ),
+          Text(
+            'Sensor yang sedang aktif',
+            style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+          ),
           const SizedBox(height: 12),
           _sensorItem('MPU6050', _mpuAktif),
           _sensorItem('GPS / Koneksi', _gpsAktif),
@@ -686,12 +530,18 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
           // Geofence info
           Row(
             children: [
-              Icon(Icons.fence_rounded, size: 14, color: AppColors.textGrey),
+              Icon(Icons.fence_rounded,
+                  size: 14, color: AppColors.textGrey),
               const SizedBox(width: 6),
-              Text('Geofence: ',
-                  style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
               Text(
-                _geofence == 'inside' ? 'Di dalam area aman' : 'Di luar area!',
+                'Geofence: ',
+                style: TextStyle(
+                    fontSize: 12, color: AppColors.textGrey),
+              ),
+              Text(
+                _geofence == 'inside'
+                    ? 'Di dalam area aman'
+                    : 'Di luar area!',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -709,7 +559,8 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
               Expanded(
                 child: Text(
                   'Update terakhir: $_lastUpdate',
-                  style: TextStyle(fontSize: 11, color: AppColors.textGrey),
+                  style: TextStyle(
+                      fontSize: 11, color: AppColors.textGrey),
                 ),
               ),
             ],
@@ -730,25 +581,30 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             height: 10,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: aktif ? AppColors.statusGreen : AppColors.statusRed,
+              color:
+                  aktif ? AppColors.statusGreen : AppColors.statusRed,
               boxShadow: aktif
                   ? [
                       BoxShadow(
-                          color: AppColors.statusGreen.withOpacity(0.4),
+                          color:
+                              AppColors.statusGreen.withOpacity(0.4),
                           blurRadius: 4)
                     ]
                   : [],
             ),
           ),
           const SizedBox(width: 10),
-          Text(nama, style: TextStyle(fontSize: 13, color: AppColors.textDark)),
+          Text(nama,
+              style: TextStyle(
+                  fontSize: 13, color: AppColors.textDark)),
           const Spacer(),
           Text(
             aktif ? 'Aktif' : 'Tidak Aktif',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: aktif ? AppColors.statusGreen : AppColors.statusRed,
+              color:
+                  aktif ? AppColors.statusGreen : AppColors.statusRed,
             ),
           ),
         ],
@@ -756,9 +612,9 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
     );
   }
 
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // CARD WRAPPER
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildCard({required Widget child}) {
     return Container(
       width: double.infinity,
@@ -768,52 +624,65 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2)),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: child,
     );
   }
 
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // SEARCH RESULTS
-  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildSearchResults() {
     final results = _filteredEvents;
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Hasil Pencarian',
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark)),
+          Text(
+            'Hasil Pencarian',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
+          ),
           const SizedBox(height: 8),
           if (results.isEmpty)
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text('Tidak ada hasil untuk "$_searchQuery"',
-                  style: TextStyle(color: AppColors.textGrey)),
+              child: Text(
+                'Tidak ada hasil untuk "$_searchQuery"',
+                style: TextStyle(color: AppColors.textGrey),
+              ),
             )
           else
-            ...results.map((e) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.history_rounded,
-                      color: AppColors.primary.withOpacity(0.6)),
-                  title: Text(e['title'] ?? '',
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
-                  subtitle: Text(
-                    '${e['date']} • ${e['time']}\n${e['description']}',
-                    style: TextStyle(fontSize: 11, color: AppColors.textGrey),
-                  ),
-                  isThreeLine: true,
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Buka: ${e['title']}'))),
-                )),
+            ...results.map(
+              (e) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.history_rounded,
+                    color: AppColors.primary.withOpacity(0.6)),
+                title: Text(
+                  e['title'] ?? '',
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '${e['date']} • ${e['time']}\n${e['description']}',
+                  style: TextStyle(
+                      fontSize: 11, color: AppColors.textGrey),
+                ),
+                isThreeLine: true,
+                onTap: () =>
+                    ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Buka: ${e['title']}')),
+                ),
+              ),
+            ),
         ],
       ),
     );

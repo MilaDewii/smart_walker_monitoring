@@ -8,4 +8,6 @@ class AppRoutes {
   static const String qrConnect = '/qr-connect';
   static const String connectWalker = '/connect-walker';
   static const String location = '/location';
+  static const String geofenceSetup = '/geofence-setup';
+  static const String history = '/history';
 }

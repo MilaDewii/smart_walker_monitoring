@@ -12,8 +12,9 @@ import 'screens/notif_screen.dart';
 import 'screens/main_navigation.dart';
 import 'screens/scan_qr_screen.dart';
 import 'screens/walker_connect_screen.dart';
-// import 'screens/history_screen.dart'; // Removed to clear analyzer warning
+import 'screens/history_screen.dart'; // Removed to clear analyzer warning
 import 'screens/location_screen.dart';
+import 'screens/geofence_setup_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +62,8 @@ class MyApp extends StatelessWidget {
         AppRoutes.qrConnect: (context) => const QrConnectScreen(),
         AppRoutes.connectWalker: (context) => const WalkerConnectScreen(),
         AppRoutes.location: (context) => const LocationScreen(),
+        AppRoutes.geofenceSetup: (context) => const GeofenceSetupScreen(),
+        AppRoutes.history: (context) => const HistoryScreen(),
       },
     );
   }

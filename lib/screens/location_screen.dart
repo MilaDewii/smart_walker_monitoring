@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../database/database_helper.dart';
 import '../services/location_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
-import '../models/location_data.dart'; 
+import '../models/location_data.dart';
 
 // ─────────────────────────────────────────────
 // COLORS
@@ -46,6 +47,10 @@ class _LocationScreenState extends State<LocationScreen>
   LocationData  _locationData = LocationData.empty();
   StreamSubscription<LocationData>? _locationSub;
 
+  // ── Lokasi GPS perangkat saat ini ─────────
+  LatLng? _deviceLocation;
+  bool _centeredToDevice = false; // sudah auto-center ke device sekali?
+
   // ── Path history ──────────────────────────
   final List<LatLng> _pathHistory = [];
   static const int   _maxPath     = 50;
@@ -74,6 +79,9 @@ class _LocationScreenState extends State<LocationScreen>
   }
 
   Future<void> _init() async {
+    // Ambil lokasi GPS perangkat terlebih dahulu untuk auto-center
+    _fetchDeviceLocation();
+
     final pairedWalkers = await DatabaseHelper.instance.getPairedWalkers();
     if (!mounted) return;
 
@@ -96,11 +104,39 @@ class _LocationScreenState extends State<LocationScreen>
         if (_pathHistory.length > _maxPath) _pathHistory.removeAt(0);
       });
 
-      // Auto-center saat pertama kali data masuk
-      if (_pathHistory.length == 1) {
+      // Auto-center ke posisi lansia saat data RTD pertama masuk
+      // hanya jika belum pernah di-center ke device
+      if (_pathHistory.length == 1 && !_centeredToDevice) {
         _mapController.move(data.lansiaPos, 16);
       }
     });
+  }
+
+  /// Ambil posisi GPS perangkat dan auto-center peta ke sana
+  Future<void> _fetchDeviceLocation() async {
+    try {
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        return; // Tidak ada izin, tidak perlu center ke device
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      if (!mounted) return;
+      final latlng = LatLng(pos.latitude, pos.longitude);
+      setState(() {
+        _deviceLocation = latlng;
+        _centeredToDevice = true;
+      });
+
+      // Auto-center ke lokasi perangkat saat ini
+      _mapController.move(latlng, 16);
+    } catch (_) {
+      // Gagal dapat lokasi device — tidak apa-apa, tetap tampil peta
+    }
   }
 
   @override
@@ -120,7 +156,6 @@ class _LocationScreenState extends State<LocationScreen>
 
   // ── Format waktu singkat ──────────────────
   String get _timeStr {
-    // Coba parse dari string RTD "2026-06-02 21:30:00"
     try {
       final dt = DateTime.parse(_lastUpdate.replaceAll(' ', 'T'));
       final h  = dt.hour.toString().padLeft(2, '0');
@@ -144,6 +179,13 @@ class _LocationScreenState extends State<LocationScreen>
 
   void _centerToLansia() => _mapController.move(_lansiaPos, 16);
 
+  /// Center ke lokasi GPS perangkat (tombol lokasi saat ini)
+  void _centerToDevice() {
+    if (_deviceLocation != null) {
+      _mapController.move(_deviceLocation!, 16);
+    }
+  }
+
   // ═══════════════════════════════════════════
   // BUILD
   // ═══════════════════════════════════════════
@@ -162,7 +204,6 @@ class _LocationScreenState extends State<LocationScreen>
                   _buildLegendCard(),
                   _buildMapControls(),
                   _buildBottomInfo(),
-                  // Loading overlay jika belum ada walker
                   if (_walkerId == null) _buildNoWalkerOverlay(),
                 ],
               ),
@@ -226,7 +267,6 @@ class _LocationScreenState extends State<LocationScreen>
               ],
             ),
           ),
-          // Status koneksi + update
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -274,10 +314,13 @@ class _LocationScreenState extends State<LocationScreen>
 
   // ── Map ───────────────────────────────────
   Widget _buildMap() {
+    // Initial center: pakai lokasi device jika ada, fallback ke geofenceCenter
+    final initialCenter = _deviceLocation ?? _geofenceCenter;
+
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCenter: _geofenceCenter,
+        initialCenter: initialCenter,
         initialZoom  : 16,
         minZoom      : 10,
         maxZoom      : 18,
@@ -288,7 +331,7 @@ class _LocationScreenState extends State<LocationScreen>
           userAgentPackageName: 'com.guardianwalk.app',
         ),
 
-        // Geofence circle — radius dari RTD
+        // Geofence circle
         if (_showGeofence)
           CircleLayer(circles: [
             CircleMarker(
@@ -335,7 +378,25 @@ class _LocationScreenState extends State<LocationScreen>
           ),
         ]),
 
-        // Marker lansia — posisi dari RTD
+        // Marker lokasi perangkat (posisi saat ini / biru)
+        if (_deviceLocation != null)
+          MarkerLayer(markers: [
+            Marker(
+              point : _deviceLocation!,
+              width : 36, height: 36,
+              child : Container(
+                decoration: BoxDecoration(
+                  color : Colors.blue.withOpacity(0.2),
+                  shape : BoxShape.circle,
+                  border: Border.all(color: Colors.blue, width: 2),
+                ),
+                child: const Icon(Icons.person_pin_circle_rounded,
+                    color: Colors.blue, size: 20),
+              ),
+            ),
+          ]),
+
+        // Marker lansia — posisi dari RTD (pulse animasi)
         MarkerLayer(markers: [
           Marker(
             point : _lansiaPos,
@@ -410,6 +471,13 @@ class _LocationScreenState extends State<LocationScreen>
             ),
             const SizedBox(height: 8),
             _legendItem(
+              color: Colors.blue,
+              icon : Icons.person_pin_circle_rounded,
+              label: 'Posisi Anda',
+              sub  : 'GPS perangkat',
+            ),
+            const SizedBox(height: 8),
+            _legendItem(
               color: _C.amanText,
               icon : Icons.home_rounded,
               label: 'Area Aman (Geofence)',
@@ -465,13 +533,24 @@ class _LocationScreenState extends State<LocationScreen>
       right: 12, bottom: 110,
       child: Column(
         children: [
+          // Tombol ke posisi lansia (RTD)
           _mapBtn(
-            icon   : Icons.my_location_rounded,
+            icon   : Icons.person_pin_rounded,
             onTap  : _centerToLansia,
             color  : _C.primary,
             tooltip: 'Ke posisi lansia',
           ),
           const SizedBox(height: 8),
+          // Tombol ke posisi perangkat saat ini
+          if (_deviceLocation != null) ...[
+            _mapBtn(
+              icon   : Icons.my_location_rounded,
+              onTap  : _centerToDevice,
+              color  : Colors.blue,
+              tooltip: 'Ke posisi saya',
+            ),
+            const SizedBox(height: 8),
+          ],
           _mapBtn(
             icon   : Icons.add,
             onTap  : () => _mapController.move(
@@ -553,7 +632,7 @@ class _LocationScreenState extends State<LocationScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Koordinat realtime dari RTD
+            // Koordinat lansia realtime dari RTD
             Row(
               children: [
                 Icon(Icons.location_on_rounded,
@@ -572,6 +651,27 @@ class _LocationScreenState extends State<LocationScreen>
                 ),
               ],
             ),
+            // Koordinat perangkat (GPS saat ini) jika tersedia
+            if (_deviceLocation != null) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.my_location_rounded,
+                      size: 15, color: Colors.blue),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Anda : ${_deviceLocation!.latitude.toStringAsFixed(6)}'
+                      '   ${_deviceLocation!.longitude.toStringAsFixed(6)}',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 6),
             Row(
               children: [
@@ -582,7 +682,6 @@ class _LocationScreenState extends State<LocationScreen>
                     style: const TextStyle(
                         fontSize: 11, color: _C.textMid)),
                 const Spacer(),
-                // Status geofence dari RTD
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 400),
                   padding: const EdgeInsets.symmetric(

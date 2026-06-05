@@ -1,12 +1,9 @@
 import 'dart:async';
-import 'dart:math';
-import 'dart:ui' as ui;
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 import '../database/database_helper.dart';
 import '../models/alert_model.dart';
 import '../services/notification_service.dart';
@@ -44,7 +41,6 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  // ── Data ──────────────────────────────────────────────────
   String _namaUser = 'User';
   String _namaLansia = 'Nama Lansia';
   String _namaLengkap = 'User';
@@ -55,24 +51,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
   StreamSubscription<List<AlertItem>>? _walkerSub;
   List<AlertItem> _alerts = [];
 
-  // ── UI State ──────────────────────────────────────────────
   bool _isLoading = true;
   String _errorMsg = '';
   String _selectedFilter = 'Semua';
-  // FIX: tambah 'Tinggi' supaya semua level tercakup
   final List<String> _filters = ['Semua', 'Tinggi', 'Darurat', 'Waspada'];
 
-  // FIX: filter tanggal — default 'Hari ini'
   String _selectedDateFilter = 'Hari ini';
   final List<String> _dateFilters = ['Hari ini', 'Semua Tanggal'];
-
-  // FIX: GlobalKey untuk baca posisi widget dropdown secara akurat
   final GlobalKey _dateDropdownKey = GlobalKey();
 
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
-  // ── Lifecycle ─────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -86,7 +76,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
     super.dispose();
   }
 
-  // ── Init: ambil SQLite lalu subscribe RTDB ────────────────
   Future<void> _loadProfileAndSubscribe() async {
     try {
       final profile = await DatabaseHelper.instance.getProfile();
@@ -95,7 +84,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
       if (!mounted) return;
 
-      // ← ambil nama & foto dari SQLite
       File? fotoFile;
       final fotoPath = profile?['foto']?.toString() ?? '';
       if (fotoPath.isNotEmpty && File(fotoPath).existsSync()) {
@@ -121,35 +109,20 @@ class _NotificationScreenState extends State<NotificationScreen> {
       _service = NotificationService(walkerId: walkerId);
       _walkerSub = _service!.watchNotifications().listen(
         (items) {
-          if (mounted)
-            setState(() {
-              _alerts = items;
-              _isLoading = false;
-            });
+          if (mounted) setState(() { _alerts = items; _isLoading = false; });
         },
         onError: (e) {
-          if (mounted)
-            setState(() {
-              _isLoading = false;
-              _errorMsg = 'Gagal memuat notifikasi: $e';
-            });
+          if (mounted) setState(() { _isLoading = false; _errorMsg = 'Gagal memuat notifikasi: $e'; });
         },
       );
     } catch (e) {
-      if (mounted)
-        setState(() {
-          _isLoading = false;
-          _errorMsg = 'Terjadi kesalahan: $e';
-        });
+      if (mounted) setState(() { _isLoading = false; _errorMsg = 'Terjadi kesalahan: $e'; });
     }
   }
 
-  // ── Filter ────────────────────────────────────────────────
-  /// FIX: logika filter tanggal "Hari ini" sekarang aktif
   List<AlertItem> get _filtered {
     Iterable<AlertItem> list = _alerts;
 
-    // Filter level
     if (_selectedFilter == 'Tinggi') {
       list = list.where((a) => a.level == AlertLevel.tinggi);
     } else if (_selectedFilter == 'Darurat') {
@@ -158,22 +131,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
       list = list.where((a) => a.level == AlertLevel.waspada);
     }
 
-    // FIX: Filter tanggal "Hari ini"
     if (_selectedDateFilter == 'Hari ini') {
       final now = DateTime.now();
       final todayStr =
           '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-      // DEBUG — hapus setelah selesai
-      debugPrint('=== TODAY: $todayStr');
-      for (final a in _alerts) {
-        debugPrint('rawDate: "${a.rawDate}" | cocok: ${a.rawDate == todayStr}');
-      }
-
       list = list.where((a) => a.rawDate == todayStr);
     }
 
-    // Filter search
     final q = _searchQuery.trim().toLowerCase();
     if (q.isNotEmpty) {
       list = list.where((a) =>
@@ -186,12 +150,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     return list.toList();
   }
 
-  // ── Actions ───────────────────────────────────────────────
-  /// FIX: markAllAsRead sekarang menggunakan _alerts yang belum difilter
-  /// agar semua notif yang belum dibaca ikut ditandai
   Future<void> _markAllRead() async {
     if (_service == null) return;
-    // Kirim semua alert (bukan hanya yang terfilter) ke service
     await _service!.markAllAsRead(_alerts);
   }
 
@@ -204,23 +164,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
         builder: (_) => NotificationDetailScreen(
           item: item.copyWith(sudahDibaca: true),
           namaLansia: _namaLansia,
-          namaLengkap: _namaLengkap, // ← tambah
-          fotoFile: _fotoFile, // ← tambah
+          namaLengkap: _namaLengkap,
+          fotoFile: _fotoFile,
           service: _service!,
         ),
       ),
     );
   }
 
-  // ── Summary helpers ───────────────────────────────────────
   int get _totalToday => _alerts.length;
-  int get _daruratToday =>
-      _alerts.where((a) => a.level == AlertLevel.darurat).length;
-  int get _dibacaToday => _alerts.where((a) => a.sudahDibaca).length;
+  int get _daruratToday => _alerts.where((a) => a.level == AlertLevel.darurat).length;
+  int get _belumDibacaToday => _alerts.where((a) => !a.sudahDibaca).length;
 
-  // ============================================================
-  // BUILD
-  // ============================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -236,11 +191,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  // ── Body ──────────────────────────────────────────────────
   Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_errorMsg.isNotEmpty) {
       return Center(
         child: Padding(
@@ -263,7 +215,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  // ── Header ────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       color: _C.bgPage,
@@ -272,21 +223,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
         children: [
           Row(
             children: [
-              // ← avatar dari foto SQLite, fallback ke inisial
               CircleAvatar(
                 radius: 22,
                 backgroundColor: _C.primary.withOpacity(0.15),
-                backgroundImage:
-                    _fotoFile != null ? FileImage(_fotoFile!) : null,
+                backgroundImage: _fotoFile != null ? FileImage(_fotoFile!) : null,
                 child: _fotoFile == null
                     ? Text(
-                        _namaLengkap.isNotEmpty
-                            ? _namaLengkap[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: _C.primary),
+                        _namaLengkap.isNotEmpty ? _namaLengkap[0].toUpperCase() : '?',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary),
                       )
                     : null,
               ),
@@ -294,46 +238,26 @@ class _NotificationScreenState extends State<NotificationScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    // ← ganti 'Halo, Mila'
-                    'Halo, $_namaLengkap',
-                    style: const TextStyle(fontSize: 12, color: _C.textMid),
-                  ),
-                  Text(
-                    'Monitoring $_namaLansia',
-                    style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: _C.textDark),
-                  ),
+                  Text('Halo, $_namaLengkap',
+                      style: const TextStyle(fontSize: 12, color: _C.textMid)),
+                  Text('Monitoring $_namaLansia',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _C.textDark)),
                 ],
               ),
               const Spacer(),
               if (_walkerId != null)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _C.primaryLight,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _walkerId!,
-                    style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: _C.primary),
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: _C.primaryLight, borderRadius: BorderRadius.circular(8)),
+                  child: Text(_walkerId!,
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _C.primary)),
                 ),
             ],
           ),
           const SizedBox(height: 12),
           Container(
             height: 44,
-            decoration: BoxDecoration(
-              color: _C.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: _C.white, borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 const SizedBox(width: 12),
@@ -354,10 +278,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 if (_searchQuery.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.clear, color: _C.textMid),
-                    onPressed: () {
-                      _searchCtrl.clear();
-                      setState(() => _searchQuery = '');
-                    },
+                    onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); },
                   ),
               ],
             ),
@@ -367,19 +288,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  // ── Main Card ─────────────────────────────────────────────
   Widget _buildNotificationCard() {
     final filtered = _filtered;
     return Container(
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -394,10 +309,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           if (filtered.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
-              child: Center(
-                child: Text('Tidak ada peringatan',
-                    style: TextStyle(color: _C.textMid, fontSize: 13)),
-              ),
+              child: Center(child: Text('Tidak ada peringatan', style: TextStyle(color: _C.textMid, fontSize: 13))),
             )
           else
             ...filtered.map((a) => _buildAlertTile(a)),
@@ -419,43 +331,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
           GestureDetector(
             onTap: () => Navigator.maybePop(context),
             child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.chevron_left,
-                  color: AppColors.white, size: 22),
+              width: 32, height: 32,
+              decoration: BoxDecoration(color: AppColors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.chevron_left, color: AppColors.white, size: 22),
             ),
           ),
           const SizedBox(width: 10),
-          const Text('Notifikasi',
-              style: TextStyle(
-                  color: AppColors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600)),
+          const Text('Notifikasi', style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w600)),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(6),
-            ),
+            decoration: BoxDecoration(color: AppColors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
             child: Row(
               children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                      color: Color(0xFF4ADE80), shape: BoxShape.circle),
-                ),
+                Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF4ADE80), shape: BoxShape.circle)),
                 const SizedBox(width: 4),
-                const Text('Live',
-                    style: TextStyle(
-                        color: AppColors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600)),
+                const Text('Live', style: TextStyle(color: AppColors.white, fontSize: 10, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -469,67 +360,31 @@ class _NotificationScreenState extends State<NotificationScreen> {
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
       child: Row(
         children: [
-          _buildSummaryChip(
-            count: _totalToday,
-            label: 'Total Peringatan',
-            sub: 'Semua',
-            bg: const Color(0xFFFEE2E2),
-            iconColor: _C.tinggiText,
-            icon: Icons.warning_amber_rounded,
-          ),
+          _buildSummaryChip(count: _totalToday, label: 'Total Peringatan', sub: 'Semua', bg: const Color(0xFFFEE2E2), iconColor: _C.tinggiText, icon: Icons.warning_amber_rounded),
           const SizedBox(width: 8),
-          _buildSummaryChip(
-            count: _daruratToday,
-            label: 'Darurat',
-            sub: 'Semua',
-            bg: const Color(0xFFFFF3CD),
-            iconColor: _C.daruratText,
-            icon: Icons.local_fire_department_rounded,
-          ),
+          _buildSummaryChip(count: _daruratToday, label: 'Darurat', sub: 'Perlu tindakan', bg: const Color(0xFFFFF3CD), iconColor: _C.daruratText, icon: Icons.local_fire_department_rounded),
           const SizedBox(width: 8),
-          _buildSummaryChip(
-            count: _dibacaToday,
-            label: 'Sudah Dibaca',
-            sub: 'Semua',
-            bg: const Color(0xFFE0F2FE),
-            iconColor: _C.primary,
-            icon: Icons.check_circle_outline_rounded,
-          ),
+          _buildSummaryChip(count: _belumDibacaToday, label: 'Belum Dibaca', sub: 'Butuh respon', bg: const Color(0xFFE0F2FE), iconColor: _C.primary, icon: Icons.mark_email_unread_rounded),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryChip({
-    required int count,
-    required String label,
-    required String sub,
-    required Color bg,
-    required Color iconColor,
-    required IconData icon,
-  }) {
+  Widget _buildSummaryChip({required int count, required String label, required String sub, required Color bg, required Color iconColor, required IconData icon}) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(10),
-        decoration:
-            BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
               Icon(icon, size: 14, color: iconColor),
               const SizedBox(width: 4),
-              Text('$count',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: iconColor)),
+              Text('$count', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: iconColor)),
             ]),
             const SizedBox(height: 2),
-            Text(label,
-                style: const TextStyle(fontSize: 10, color: _C.textDark),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+            Text(label, style: const TextStyle(fontSize: 10, color: _C.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
             Text(sub, style: const TextStyle(fontSize: 9, color: _C.textMid)),
           ],
         ),
@@ -537,26 +392,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  // FIX: _buildFilterRow sekarang memanggil _buildDateDropdown yang fungsional
   Widget _buildFilterRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Baris 1: filter chip — scrollable horizontal
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _filters.map((f) => _buildFilterChip(f)).toList(),
-            ),
+            child: Row(children: _filters.map((f) => _buildFilterChip(f)).toList()),
           ),
           const SizedBox(height: 8),
-          // Baris 2: date dropdown rata kanan
-          Align(
-            alignment: Alignment.centerRight,
-            child: _buildDateDropdown(),
-          ),
+          Align(alignment: Alignment.centerRight, child: _buildDateDropdown()),
         ],
       ),
     );
@@ -574,98 +421,46 @@ class _NotificationScreenState extends State<NotificationScreen> {
           color: active ? _C.primary : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: active ? AppColors.white : _C.textMid)),
+        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: active ? AppColors.white : _C.textMid)),
       ),
     );
   }
 
-  /// FIX: dropdown pakai GlobalKey → posisi menu tepat di bawah tombol filter
   Widget _buildDateDropdown() {
     return GestureDetector(
       onTap: () async {
-        // Baca posisi & ukuran widget secara akurat dari RenderBox
-        final RenderBox box =
-            _dateDropdownKey.currentContext!.findRenderObject() as RenderBox;
+        final RenderBox box = _dateDropdownKey.currentContext!.findRenderObject() as RenderBox;
         final Offset offset = box.localToGlobal(Offset.zero);
         final Size size = box.size;
-
         final result = await showMenu<String>(
           context: context,
-          // Posisi tepat di bawah tombol
-          position: RelativeRect.fromLTRB(
-            offset.dx,
-            offset.dy + size.height + 4,
-            offset.dx + size.width,
-            0,
-          ),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          position: RelativeRect.fromLTRB(offset.dx, offset.dy + size.height + 4, offset.dx + size.width, 0),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           elevation: 4,
-          items: _dateFilters
-              .map((d) => PopupMenuItem<String>(
-                    value: d,
-                    height: 36,
-                    child: Text(d,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: d == _selectedDateFilter
-                                ? FontWeight.w700
-                                : FontWeight.normal,
-                            color: d == _selectedDateFilter
-                                ? _C.primary
-                                : _C.textDark)),
-                  ))
-              .toList(),
+          items: _dateFilters.map((d) => PopupMenuItem<String>(
+            value: d,
+            height: 36,
+            child: Text(d, style: TextStyle(fontSize: 12, fontWeight: d == _selectedDateFilter ? FontWeight.w700 : FontWeight.normal, color: d == _selectedDateFilter ? _C.primary : _C.textDark)),
+          )).toList(),
         );
-        if (result != null) {
-          setState(() => _selectedDateFilter = result);
-        }
+        if (result != null) setState(() => _selectedDateFilter = result);
       },
       child: Container(
         key: _dateDropdownKey,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          border: Border.all(
-              color: _selectedDateFilter == 'Hari ini'
-                  ? _C.primary
-                  : const Color(0xFFE2E8F0)),
+          border: Border.all(color: _selectedDateFilter == 'Hari ini' ? _C.primary : const Color(0xFFE2E8F0)),
           borderRadius: BorderRadius.circular(8),
-          color: _selectedDateFilter == 'Hari ini'
-              ? _C.primaryLight
-              : Colors.transparent,
+          color: _selectedDateFilter == 'Hari ini' ? _C.primaryLight : Colors.transparent,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.calendar_today_rounded,
-              size: 12,
-              color:
-                  _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid,
-            ),
+            Icon(Icons.calendar_today_rounded, size: 12, color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
             const SizedBox(width: 4),
-            Text(
-              _selectedDateFilter,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: _selectedDateFilter == 'Hari ini'
-                      ? _C.primary
-                      : _C.textMid,
-                  fontWeight: _selectedDateFilter == 'Hari ini'
-                      ? FontWeight.w600
-                      : FontWeight.normal),
-            ),
+            Text(_selectedDateFilter, style: TextStyle(fontSize: 11, color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid, fontWeight: _selectedDateFilter == 'Hari ini' ? FontWeight.w600 : FontWeight.normal)),
             const SizedBox(width: 2),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 14,
-              color:
-                  _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid,
-            ),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
           ],
         ),
       ),
@@ -680,23 +475,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
           const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Daftar Peringatan',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: _C.textDark)),
-              Text('Terbaru Di atas',
-                  style: TextStyle(fontSize: 10, color: _C.textMid)),
+              Text('Daftar Peringatan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _C.textDark)),
+              Text('Terbaru Di atas', style: TextStyle(fontSize: 10, color: _C.textMid)),
             ],
           ),
           const Spacer(),
           GestureDetector(
             onTap: _markAllRead,
-            child: const Text('Tandai Semua Dibaca',
-                style: TextStyle(
-                    fontSize: 10,
-                    color: _C.primary,
-                    fontWeight: FontWeight.w600)),
+            child: const Text('Tandai Semua Dibaca', style: TextStyle(fontSize: 10, color: _C.primary, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -721,134 +507,272 @@ class _NotificationScreenState extends State<NotificationScreen> {
             Row(
               children: [
                 Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: ld['bg'] as Color,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  width: 34, height: 34,
+                  decoration: BoxDecoration(color: ld['bg'] as Color, borderRadius: BorderRadius.circular(10)),
                   child: Icon(item.icon, size: 18, color: ld['text'] as Color),
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(item.title,
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: _C.textDark)),
-                ),
+                Expanded(child: Text(item.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _C.textDark))),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: ld['badgeBg'] as Color,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(ld['label'] as String,
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: ld['text'] as Color)),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: ld['badgeBg'] as Color, borderRadius: BorderRadius.circular(6)),
+                  child: Text(ld['label'] as String, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: ld['text'] as Color)),
                 ),
                 const SizedBox(width: 6),
-                Text(item.time.split(' ').first,
-                    style: const TextStyle(fontSize: 10, color: _C.textMid)),
+                Text(item.time.split(' ').first, style: const TextStyle(fontSize: 10, color: _C.textMid)),
                 const SizedBox(width: 4),
                 Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: item.sudahDibaca ? Colors.transparent : _C.unreadDot,
-                    shape: BoxShape.circle,
-                  ),
+                  width: 7, height: 7,
+                  decoration: BoxDecoration(color: item.sudahDibaca ? Colors.transparent : _C.unreadDot, shape: BoxShape.circle),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            Text(item.description,
-                style: const TextStyle(fontSize: 12, color: _C.textDark)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _buildMeta('Skor : ${item.score.toStringAsFixed(2)}'),
-                const SizedBox(width: 8),
-                _buildMeta('Durasi : ${item.durasiDetik} Detik'),
-                const Spacer(),
-                _buildReadBadge(item.sudahDibaca),
-              ],
-            ),
+            Text(item.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: _C.textDark)),
+            const SizedBox(height: 10),
+            _buildTileActionButtons(item),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMeta(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child:
-          Text(text, style: const TextStyle(fontSize: 10, color: _C.textMid)),
+  // Tombol aksi di tile list — lebih ringkas
+  Widget _buildTileActionButtons(AlertItem item) {
+    final bool sudahAman = item.sudahDibaca;
+    return Row(
+      children: [
+        _actionBtn(
+          icon: Icons.phone_rounded,
+          label: 'Hubungi',
+          color: _C.tinggiText,
+          bg: _C.tinggiBg,
+          onTap: () => _showContactPicker(context),
+        ),
+        const SizedBox(width: 6),
+        _actionBtn(
+          icon: sudahAman ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
+          label: sudahAman ? 'Aman' : 'Tandai Aman',
+          color: _C.waspadaText,
+          bg: _C.waspadaBg,
+          onTap: () async {
+            if (!sudahAman) await _service?.markAsRead(item.id);
+          },
+        ),
+        const Spacer(),
+        GestureDetector(
+          onTap: () => _openDetail(item),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: _C.primary, borderRadius: BorderRadius.circular(8)),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Lihat Detail', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.white)),
+                SizedBox(width: 4),
+                
+                Icon(Icons.chevron_right, size: 14, color: AppColors.white),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildReadBadge(bool dibaca) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: dibaca ? _C.waspadaBg : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        dibaca ? 'Dibaca' : 'Belum dibaca',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: dibaca ? _C.waspadaText : _C.textMid,
+  Widget _actionBtn({required IconData icon, required String label, required Color color, required Color bg, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withOpacity(0.3))),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+          ],
         ),
       ),
+    );
+  }
+
+  // ── Bottom sheet pilih kontak ─────────────────────────────
+  void _showContactPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ContactPickerSheet(),
     );
   }
 
   Map<String, dynamic> _levelData(AlertLevel level) {
     switch (level) {
       case AlertLevel.tinggi:
-        return {
-          'label': 'Tinggi',
-          'text': _C.tinggiText,
-          'bg': _C.tinggiBg,
-          'badgeBg': _C.tinggiText.withOpacity(0.12),
-        };
+        return {'label': 'Tinggi', 'text': _C.tinggiText, 'bg': _C.tinggiBg, 'badgeBg': _C.tinggiText.withOpacity(0.12)};
       case AlertLevel.darurat:
-        return {
-          'label': 'Darurat',
-          'text': _C.daruratText,
-          'bg': _C.daruratBg,
-          'badgeBg': _C.daruratText.withOpacity(0.12),
-        };
+        return {'label': 'Darurat', 'text': _C.daruratText, 'bg': _C.daruratBg, 'badgeBg': _C.daruratText.withOpacity(0.12)};
       case AlertLevel.waspada:
-        return {
-          'label': 'Waspada',
-          'text': _C.waspadaText,
-          'bg': _C.waspadaBg,
-          'badgeBg': _C.waspadaText.withOpacity(0.12),
-        };
+        return {'label': 'Waspada', 'text': _C.waspadaText, 'bg': _C.waspadaBg, 'badgeBg': _C.waspadaText.withOpacity(0.12)};
     }
+  }
+}
+
+// ============================================================
+// CONTACT PICKER SHEET — ambil dari emergency_contacts di DB
+// ============================================================
+class _ContactPickerSheet extends StatefulWidget {
+  @override
+  State<_ContactPickerSheet> createState() => _ContactPickerSheetState();
+}
+
+class _ContactPickerSheetState extends State<_ContactPickerSheet> {
+  List<Map<String, dynamic>> _contacts = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final contacts = await DatabaseHelper.instance.getEmergencyContacts();
+    if (mounted) setState(() { _contacts = contacts; _loading = false; });
+  }
+
+  Future<void> _call(String number) async {
+    Navigator.pop(context);
+    final uri = Uri(scheme: 'tel', path: number);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Tidak bisa menghubungi $number'), backgroundColor: _C.tinggiText),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: _C.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // handle bar
+          Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2))),
+          // header
+          Row(
+            children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(color: _C.tinggiBg, borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.phone_rounded, size: 18, color: _C.tinggiText),
+              ),
+              const SizedBox(width: 10),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Hubungi Kontak Darurat', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark)),
+                  Text('Pilih kontak yang akan dihubungi', style: TextStyle(fontSize: 11, color: _C.textMid)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 8),
+          // konten
+          if (_loading)
+            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+          else if (_contacts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  const Icon(Icons.contacts_outlined, size: 40, color: _C.textMid),
+                  const SizedBox(height: 8),
+                  const Text('Belum ada kontak darurat', style: TextStyle(fontSize: 13, color: _C.textMid)),
+                  const SizedBox(height: 4),
+                  const Text('Tambahkan di menu Profil → Kontak Darurat', style: TextStyle(fontSize: 11, color: _C.textMid), textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, size: 16, color: _C.primary),
+                    label: const Text('Tutup', style: TextStyle(color: _C.primary, fontSize: 13)),
+                    style: OutlinedButton.styleFrom(side: const BorderSide(color: _C.primary), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _contacts.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              itemBuilder: (_, i) {
+                final c = _contacts[i];
+                final name = c['contact_name']?.toString() ?? '-';
+                final number = c['contact_number']?.toString() ?? '';
+                final rel = c['relationship']?.toString() ?? '';
+                final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  leading: CircleAvatar(
+                    radius: 22,
+                    backgroundColor: _C.primaryLight,
+                    child: Text(initial, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary)),
+                  ),
+                  title: Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _C.textDark)),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(number, style: const TextStyle(fontSize: 12, color: _C.textMid)),
+                      if (rel.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(top: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: _C.primaryLight, borderRadius: BorderRadius.circular(4)),
+                          child: Text(rel, style: const TextStyle(fontSize: 10, color: _C.primary, fontWeight: FontWeight.w600)),
+                        ),
+                    ],
+                  ),
+                  trailing: GestureDetector(
+                    onTap: () => _call(number),
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(color: _C.tinggiText, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.phone_rounded, color: Colors.white, size: 18),
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
   }
 }
 
 // ============================================================
 // NOTIFICATION DETAIL SCREEN
 // ============================================================
-class NotificationDetailScreen extends StatelessWidget {
+class NotificationDetailScreen extends StatefulWidget {
   final AlertItem item;
   final String namaLansia;
-  final String namaLengkap; // ← tambah
-  final File? fotoFile; // ← tambah
+  final String namaLengkap;
+  final File? fotoFile;
   final NotificationService service;
 
   const NotificationDetailScreen({
@@ -860,30 +784,70 @@ class NotificationDetailScreen extends StatelessWidget {
     required this.service,
   });
 
+  @override
+  State<NotificationDetailScreen> createState() => _NotificationDetailScreenState();
+}
+
+class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
+  late bool _sudahAman;
+
+  @override
+  void initState() {
+    super.initState();
+    _sudahAman = widget.item.sudahDibaca;
+  }
+
   Map<String, dynamic> get _levelData {
-    switch (item.level) {
+    switch (widget.item.level) {
       case AlertLevel.tinggi:
-        return {
-          'label': 'Tinggi',
-          'text': _C.tinggiText,
-          'bg': _C.tinggiBg,
-          'badgeBg': _C.tinggiText.withOpacity(0.12),
-        };
+        return {'label': 'Tinggi', 'text': _C.tinggiText, 'bg': _C.tinggiBg, 'badgeBg': _C.tinggiText.withOpacity(0.12)};
       case AlertLevel.darurat:
-        return {
-          'label': 'Darurat',
-          'text': _C.daruratText,
-          'bg': _C.daruratBg,
-          'badgeBg': _C.daruratText.withOpacity(0.12),
-        };
+        return {'label': 'Darurat', 'text': _C.daruratText, 'bg': _C.daruratBg, 'badgeBg': _C.daruratText.withOpacity(0.12)};
       case AlertLevel.waspada:
-        return {
-          'label': 'Waspada',
-          'text': _C.waspadaText,
-          'bg': _C.waspadaBg,
-          'badgeBg': _C.waspadaText.withOpacity(0.12),
-        };
+        return {'label': 'Waspada', 'text': _C.waspadaText, 'bg': _C.waspadaBg, 'badgeBg': _C.waspadaText.withOpacity(0.12)};
     }
+  }
+
+  // Tandai aman — update Firebase & ubah state lokal
+  Future<void> _tandaiAman() async {
+    if (_sudahAman) return;
+    await widget.service.markAsRead(widget.item.id);
+    if (mounted) setState(() => _sudahAman = true);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.white, size: 16),
+              SizedBox(width: 8),
+              Text('Kejadian ditandai aman', style: TextStyle(fontSize: 13)),
+            ],
+          ),
+          backgroundColor: _C.waspadaText,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  // Buka contact picker
+  void _showContactPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ContactPickerSheet(),
+    );
+  }
+
+  // Navigasi ke History
+  void _goToHistory() {
+    // Pop detail screen dulu, lalu push history
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.pushNamed(context, AppRoutes.history);
   }
 
   @override
@@ -904,17 +868,13 @@ class NotificationDetailScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     _buildAlertCard(context, ld),
                     const SizedBox(height: 14),
-                    _buildSectionTitle('Lokasi Lansia'),
+                    _buildSectionTitle('Lokasi Sekarang'),
                     const SizedBox(height: 8),
                     _buildMapCard(context),
                     const SizedBox(height: 14),
-                    _buildSectionTitle('Ringkasan Kejadian'),
+                    _buildSectionTitle('Tindakan'),
                     const SizedBox(height: 8),
-                    _buildRingkasan(),
-                    const SizedBox(height: 14),
-                    _buildSectionTitle('Grafik Aktivitas'),
-                    const SizedBox(height: 8),
-                    _buildChartCard(),
+                    _buildActionPanel(context),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -926,69 +886,28 @@ class NotificationDetailScreen extends StatelessWidget {
     );
   }
 
-  // FIX: Header detail screen — hapus _namaLansia yang tidak ada, pakai namaLansia (parameter)
-  // FIX: hilangkan Text ketiga yang duplikat dan menyebabkan syntax error
   Widget _buildHeader(BuildContext context) {
     return Container(
       color: _C.bgPage,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              // ← sama seperti list screen
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: _C.primary.withOpacity(0.12),
-                backgroundImage: fotoFile != null ? FileImage(fotoFile!) : null,
-                child: fotoFile == null
-                    ? Text(
-                        namaLengkap.isNotEmpty
-                            ? namaLengkap[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: _C.primary),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    // ← ganti 'Halo, Mila'
-                    'Halo, $namaLengkap',
-                    style: const TextStyle(fontSize: 12, color: _C.textMid),
-                  ),
-                  Text(
-                    'Monitoring $namaLansia',
-                    style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: _C.textDark),
-                  ),
-                ],
-              ),
-            ],
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: _C.primary.withOpacity(0.12),
+            backgroundImage: widget.fotoFile != null ? FileImage(widget.fotoFile!) : null,
+            child: widget.fotoFile == null
+                ? Text(widget.namaLengkap.isNotEmpty ? widget.namaLengkap[0].toUpperCase() : '?',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary))
+                : null,
           ),
-          const SizedBox(height: 12),
-          Container(
-            height: 44,
-            decoration: BoxDecoration(
-              color: _C.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Row(
-              children: [
-                SizedBox(width: 12),
-                Icon(Icons.search, color: _C.textMid, size: 20),
-                SizedBox(width: 8),
-                Text('Cari notifikasi ...',
-                    style: TextStyle(color: _C.textMid, fontSize: 14)),
-              ],
-            ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Halo, ${widget.namaLengkap}', style: const TextStyle(fontSize: 12, color: _C.textMid)),
+              Text('Monitoring ${widget.namaLansia}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _C.textDark)),
+            ],
           ),
         ],
       ),
@@ -996,59 +915,59 @@ class NotificationDetailScreen extends StatelessWidget {
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(title,
-        style: const TextStyle(
-            fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark));
+    return Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark));
   }
 
-  // ── Alert Card ────────────────────────────────────────────
   Widget _buildAlertCard(BuildContext context, Map<String, dynamic> ld) {
     return Container(
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
+          // header biru dengan back btn
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: const BoxDecoration(
-              color: _C.primary,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
+            decoration: const BoxDecoration(color: _C.primary, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
             child: Row(
               children: [
                 GestureDetector(
                   onTap: () => Navigator.maybePop(context),
                   child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.chevron_left,
-                        color: AppColors.white, size: 22),
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(color: AppColors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.chevron_left, color: AppColors.white, size: 22),
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Text('Detail Peringatan',
-                    style: TextStyle(
-                        color: AppColors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600)),
+                const Text('Detail Peringatan', style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                // badge status aman
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _sudahAman ? _C.waspadaText.withOpacity(0.9) : AppColors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_sudahAman ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded, size: 12, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(_sudahAman ? 'Aman' : 'Aktif', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
+          // konten kejadian
           Container(
             margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: (ld['bg'] as Color).withOpacity(0.5),
               borderRadius: BorderRadius.circular(14),
@@ -1060,66 +979,27 @@ class NotificationDetailScreen extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: ld['bg'] as Color,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child:
-                          Icon(item.icon, size: 20, color: ld['text'] as Color),
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(color: ld['bg'] as Color, borderRadius: BorderRadius.circular(12)),
+                      child: Icon(widget.item.icon, size: 22, color: ld['text'] as Color),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(item.title,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: _C.textDark)),
-                    ),
+                    Expanded(child: Text(widget.item.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _C.textDark))),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: ld['badgeBg'] as Color,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(ld['label'] as String,
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: ld['text'] as Color)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: ld['text'] as Color, borderRadius: BorderRadius.circular(6)),
+                      child: Text(ld['label'] as String, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.white)),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Text(item.description,
-                    style: const TextStyle(fontSize: 12, color: _C.textDark)),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
+                Text(widget.item.description, style: const TextStyle(fontSize: 13, color: _C.textDark, height: 1.4)),
+                const SizedBox(height: 10),
                 Row(
                   children: [
-                    Text('${item.time}   ${item.date}',
-                        style:
-                            const TextStyle(fontSize: 10, color: _C.textMid)),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: item.sudahDibaca
-                            ? _C.waspadaBg
-                            : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        item.sudahDibaca ? 'Dibaca' : 'Belum dibaca',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: item.sudahDibaca ? _C.waspadaText : _C.textMid,
-                        ),
-                      ),
-                    ),
+                    const Icon(Icons.access_time_rounded, size: 13, color: _C.textMid),
+                    const SizedBox(width: 4),
+                    Text('${widget.item.time}  ·  ${widget.item.date}', style: const TextStyle(fontSize: 11, color: _C.textMid)),
                   ],
                 ),
               ],
@@ -1130,254 +1010,73 @@ class NotificationDetailScreen extends StatelessWidget {
     );
   }
 
-  // ── Ringkasan Kejadian ────────────────────────────────────
-  Widget _buildRingkasan() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _C.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Row(
-        children: [
-          _buildRingkasanItem(
-            icon: Icons.speed_rounded,
-            iconColor: _C.tinggiText,
-            iconBg: _C.tinggiBg,
-            label: 'Skor Anomali',
-            value: '${item.score.toStringAsFixed(2)}/1.00',
-          ),
-          _buildDividerV(),
-          _buildRingkasanItem(
-            icon: Icons.timer_rounded,
-            iconColor: _C.primary,
-            iconBg: _C.primaryLight,
-            label: 'Durasi',
-            value: '${item.durasiDetik} Detik',
-          ),
-          _buildDividerV(),
-          _buildRingkasanItem(
-            icon: Icons.access_time_rounded,
-            iconColor: _C.waspadaText,
-            iconBg: _C.waspadaBg,
-            label: 'Waktu',
-            value: item.time,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRingkasanItem({
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBg,
-    required String label,
-    required String value,
-  }) {
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-            child: Icon(icon, size: 18, color: iconColor),
-          ),
-          const SizedBox(height: 6),
-          Text(label, style: const TextStyle(fontSize: 10, color: _C.textMid)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: _C.textDark),
-              textAlign: TextAlign.center),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDividerV() =>
-      Container(width: 1, height: 56, color: const Color(0xFFE2E8F0));
-
-  // ── Map Card ──────────────────────────────────────────────
-  // FIX: Koordinat sekarang benar karena _toDoubleStrict di model
-  // menangani latitude: "" → null → 0.0 (dan idealnya Firebase sudah diisi)
   Widget _buildMapCard(BuildContext context) {
-    // FIX: Tampilkan peringatan jika koordinat masih 0,0
-    final bool hasValidLocation =
-        item.location.latitude != 0.0 || item.location.longitude != 0.0;
-
+    final bool hasValidLocation = widget.item.location.latitude != 0.0 || widget.item.location.longitude != 0.0;
     return Container(
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         children: [
           ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            borderRadius: hasValidLocation
+                ? const BorderRadius.vertical(top: Radius.circular(16))
+                : BorderRadius.circular(16),
             child: SizedBox(
-              height: 200,
+              height: 220,
               child: hasValidLocation
                   ? Stack(
                       children: [
                         FlutterMap(
-                          options: MapOptions(
-                            initialCenter: item.location,
-                            initialZoom: 15,
-                          ),
+                          options: MapOptions(initialCenter: widget.item.location, initialZoom: 15),
                           children: [
-                            TileLayer(
-                              urlTemplate:
-                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                              userAgentPackageName: 'com.guardianwalk.app',
-                            ),
-                            CircleLayer(circles: [
-                              CircleMarker(
-                                point: item.location,
-                                radius: 80,
-                                color: _C.waspadaText.withOpacity(0.15),
-                                borderColor: _C.waspadaText,
-                                borderStrokeWidth: 2,
-                                useRadiusInMeter: true,
-                              ),
-                            ]),
+                            TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.guardianwalk.app'),
+                            CircleLayer(circles: [CircleMarker(point: widget.item.location, radius: 80, color: _C.waspadaText.withOpacity(0.15), borderColor: _C.waspadaText, borderStrokeWidth: 2, useRadiusInMeter: true)]),
                             MarkerLayer(markers: [
                               Marker(
-                                point: item.location,
-                                width: 40,
-                                height: 40,
+                                point: widget.item.location, width: 40, height: 40,
                                 child: Container(
-                                  decoration: BoxDecoration(
-                                    color: _C.primary,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: AppColors.white, width: 2.5),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: _C.primary.withOpacity(0.4),
-                                        blurRadius: 8,
-                                        spreadRadius: 2,
-                                      )
-                                    ],
-                                  ),
-                                  child: const Icon(Icons.person_pin_rounded,
-                                      color: AppColors.white, size: 22),
+                                  decoration: BoxDecoration(color: _C.primary, shape: BoxShape.circle, border: Border.all(color: AppColors.white, width: 2.5), boxShadow: [BoxShadow(color: _C.primary.withOpacity(0.4), blurRadius: 8, spreadRadius: 2)]),
+                                  child: const Icon(Icons.person_pin_rounded, color: AppColors.white, size: 22),
                                 ),
                               ),
                             ]),
                           ],
                         ),
                         Positioned(
-                          top: 10,
-                          left: 0,
-                          right: 0,
+                          top: 10, left: 0, right: 0,
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.white.withOpacity(0.9),
-                                borderRadius: BorderRadius.circular(20),
-                                border:
-                                    Border.all(color: _C.waspadaText, width: 1),
-                              ),
-                              child: const Text('Area Aman',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _C.waspadaText)),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(color: AppColors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(20), border: Border.all(color: _C.waspadaText, width: 1)),
+                              child: const Text('Posisi Terakhir Lansia', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _C.waspadaText)),
                             ),
                           ),
                         ),
                       ],
                     )
-                  // FIX: Tampilkan placeholder jika koordinat tidak valid
                   : Container(
                       color: const Color(0xFFF1F5F9),
-                      child: const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.location_off_rounded,
-                                size: 36, color: _C.textMid),
-                            SizedBox(height: 8),
-                            Text('Koordinat tidak tersedia',
-                                style:
-                                    TextStyle(fontSize: 12, color: _C.textMid)),
-                            Text('Periksa data latitude/longitude di Firebase',
-                                style:
-                                    TextStyle(fontSize: 10, color: _C.textMid)),
-                          ],
-                        ),
-                      ),
+                      child: const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.location_off_rounded, size: 36, color: _C.textMid),
+                        SizedBox(height: 8),
+                        Text('Lokasi tidak tersedia', style: TextStyle(fontSize: 12, color: _C.textMid)),
+                      ])),
                     ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                _buildCoordChip(
-                    'Lat : ${item.location.latitude.toStringAsFixed(4)}'),
-                const SizedBox(width: 8),
-                _buildCoordChip(
-                    'Lng : ${item.location.longitude.toStringAsFixed(4)}'),
-                const Spacer(),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: hasValidLocation ? _C.waspadaBg : _C.tinggiBg,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    hasValidLocation ? 'Terhubung' : 'Tidak Ada Data',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color:
-                            hasValidLocation ? _C.waspadaText : _C.tinggiText),
-                  ),
-                ),
-              ],
             ),
           ),
           if (hasValidLocation)
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
               child: SizedBox(
-                width: double.infinity,
-                height: 44,
+                width: double.infinity, height: 44,
                 child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pushNamed(
-                      context, AppRoutes.location,
-                      arguments: item.location),
-                  icon: const Icon(Icons.location_on_rounded, size: 18),
-                  label: const Text('Lihat Lokasi',
-                      style:
-                          TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _C.primary,
-                    foregroundColor: AppColors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
-                  ),
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.location, arguments: widget.item.location),
+                  icon: const Icon(Icons.navigation_rounded, size: 18),
+                  label: const Text('Buka Navigasi ke Lokasi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(backgroundColor: _C.primary, foregroundColor: AppColors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
                 ),
               ),
             ),
@@ -1386,82 +1085,111 @@ class NotificationDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCoordChip(String text) {
+  // ── Action Panel — 3 tombol utama ─────────────────────────
+  Widget _buildActionPanel(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(text, style: const TextStyle(fontSize: 9, color: _C.textMid)),
-    );
-  }
-
-  // ── Chart Card ────────────────────────────────────────────
-  Widget _buildChartCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _buildLegendDot(AppColors.primary, 'Akselerasi'),
-              const SizedBox(width: 12),
-              _buildLegendDot(const Color(0xFF7C3AED), 'Gyroscope'),
-              const SizedBox(width: 12),
-              _buildLegendDot(const Color(0xFFF59E0B), 'Ambang Batas'),
-            ],
-          ),
+          const Text('Apa yang ingin kamu lakukan?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _C.textDark)),
           const SizedBox(height: 12),
+
+          // Tombol 1: Hubungi — paling menonjol, buka contact picker
           SizedBox(
-            height: 140,
-            child: CustomPaint(
-              size: const Size(double.infinity, 140),
-              painter: _ActivityChartPainter(score: item.score),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
-                Text('10.47', style: TextStyle(fontSize: 8, color: _C.textMid)),
-                Text('10.48', style: TextStyle(fontSize: 8, color: _C.textMid)),
-                Text('10.50', style: TextStyle(fontSize: 8, color: _C.textMid)),
-                Text('11.00', style: TextStyle(fontSize: 8, color: _C.textMid)),
-                Text('11.02', style: TextStyle(fontSize: 8, color: _C.textMid)),
-                Text('11.04', style: TextStyle(fontSize: 8, color: _C.textMid)),
-                Text('11.07', style: TextStyle(fontSize: 8, color: _C.textMid)),
-              ],
+            width: double.infinity, height: 48,
+            child: ElevatedButton.icon(
+              onPressed: _showContactPicker,
+              icon: const Icon(Icons.phone_rounded, size: 18),
+              label: const Text('Hubungi Sekarang', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _C.tinggiText,
+                foregroundColor: AppColors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
             ),
           ),
           const SizedBox(height: 10),
+
+          // Tombol 2 & 3: Tandai Aman + Lihat Riwayat — sejajar
+          Row(
+            children: [
+              // Tandai Aman — animasi berubah setelah diklik
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    decoration: BoxDecoration(
+                      color: _sudahAman ? _C.waspadaBg : Colors.transparent,
+                      border: Border.all(color: _C.waspadaText),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: _tandaiAman,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _sudahAman ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
+                              size: 16,
+                              color: _C.waspadaText,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _sudahAman ? '✓ Sudah Aman' : 'Tandai Aman',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _C.waspadaText),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Lihat Riwayat — navigasi ke history screen
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(context, AppRoutes.history);
+                    },
+                    icon: const Icon(Icons.history_rounded, size: 16, color: _C.primary),
+                    label: const Text('Lihat Riwayat', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _C.primary)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: _C.primary),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Hint info
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: _C.tinggiBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Row(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: _C.primaryLight, borderRadius: BorderRadius.circular(10)),
+            child: Row(
               children: [
-                Icon(Icons.info_outline_rounded,
-                    size: 12, color: _C.tinggiText),
-                SizedBox(width: 6),
+                const Icon(Icons.info_outline_rounded, size: 13, color: _C.primary),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Grafik ini menampilkan data akselerasi dan gyroscope dari sensor IMU/MPU6050 selama kejadian anomali. Garis merah menandai titik anomali terdeteksi.',
-                    style: TextStyle(fontSize: 9, color: _C.tinggiText),
+                    'Data sensor detail (IMU, HC-SR04, status sistem) tersedia di menu Riwayat.',
+                    style: TextStyle(fontSize: 11, color: _C.primary.withOpacity(0.85), height: 1.4),
                   ),
                 ),
               ],
@@ -1470,138 +1198,5 @@ class NotificationDetailScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Widget _buildLegendDot(Color color, String label) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 9, color: _C.textMid)),
-      ],
-    );
-  }
-}
-
-// ============================================================
-// CUSTOM PAINTER – Activity Chart
-// ============================================================
-class _ActivityChartPainter extends CustomPainter {
-  final double score;
-  _ActivityChartPainter({required this.score});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rng = Random(42);
-    final w = size.width;
-    final h = size.height;
-    const steps = 60;
-
-    final gridPaint = Paint()
-      ..color = const Color(0xFFE2E8F0)
-      ..strokeWidth = 0.8;
-    for (int i = 0; i <= 4; i++) {
-      canvas.drawLine(Offset(0, h * i / 4), Offset(w, h * i / 4), gridPaint);
-    }
-
-    List<double> accel = [];
-    List<double> gyro = [];
-    for (int i = 0; i < steps; i++) {
-      double spike = 0;
-      if (i > steps * 0.65 && i < steps * 0.80) {
-        spike = (score * 0.6) * sin((i - steps * 0.65) * pi / (steps * 0.15));
-      }
-      accel.add(0.3 + rng.nextDouble() * 0.25 + spike.abs());
-      gyro.add(0.2 + rng.nextDouble() * 0.2 + spike.abs() * 0.6);
-    }
-
-    double norm(double v) => h - (v.clamp(0.0, 1.2) / 1.2) * h;
-
-    final threshPaint = Paint()
-      ..color = const Color(0xFFF59E0B)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    canvas.drawDashedLine(
-        Offset(0, norm(0.75)), Offset(w, norm(0.75)), threshPaint, 6, 4);
-
-    final aStart = steps * 0.65 / steps * w;
-    final aEnd = steps * 0.80 / steps * w;
-    canvas.drawRect(Rect.fromLTRB(aStart, 0, aEnd, h),
-        Paint()..color = const Color(0xFFFEE2E2).withOpacity(0.6));
-    canvas.drawLine(
-        Offset((aStart + aEnd) / 2, 0),
-        Offset((aStart + aEnd) / 2, h),
-        Paint()
-          ..color = AppColors.statusRed
-          ..strokeWidth = 1.5);
-
-    void drawPath(List<double> data, Color color) {
-      final path = ui.Path();
-      for (int i = 0; i < data.length; i++) {
-        final x = i / (steps - 1) * w;
-        final y = norm(data[i]);
-        if (i == 0) {
-          path.moveTo(x, y);
-        } else {
-          final prevX = (i - 1) / (steps - 1) * w;
-          final prevY = norm(data[i - 1]);
-          final cpX = (prevX + x) / 2;
-          path.cubicTo(cpX, prevY, cpX, y, x, y);
-        }
-      }
-      canvas.drawPath(
-          path,
-          Paint()
-            ..color = color
-            ..strokeWidth = 1.8
-            ..style = PaintingStyle.stroke
-            ..strokeCap = StrokeCap.round);
-    }
-
-    drawPath(accel, AppColors.primary);
-    drawPath(gyro, const Color(0xFF7C3AED));
-
-    final tp = TextPainter(textDirection: TextDirection.ltr);
-    for (final label in ['1.2', '0.9', '0.6', '0.3', '0']) {
-      final idx = ['1.2', '0.9', '0.6', '0.3', '0'].indexOf(label);
-      tp.text = TextSpan(
-          text: label, style: const TextStyle(fontSize: 8, color: _C.textMid));
-      tp.layout();
-      tp.paint(canvas, Offset(0, h * idx / 4 + 1));
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// ── Dashed line extension ──────────────────────────────────
-extension on Canvas {
-  void drawDashedLine(
-      Offset start, Offset end, Paint paint, double dashLen, double gapLen) {
-    final dx = end.dx - start.dx;
-    final dy = end.dy - start.dy;
-    final dist = sqrt(dx * dx + dy * dy);
-    final nx = dx / dist;
-    final ny = dy / dist;
-    double drawn = 0;
-    bool drawing = true;
-    while (drawn < dist) {
-      final segLen = drawing ? dashLen : gapLen;
-      final next = (drawn + segLen).clamp(0.0, dist);
-      if (drawing) {
-        drawLine(
-          Offset(start.dx + nx * drawn, start.dy + ny * drawn),
-          Offset(start.dx + nx * next, start.dy + ny * next),
-          paint,
-        );
-      }
-      drawn = next;
-      drawing = !drawing;
-    }
   }
 }
