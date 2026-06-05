@@ -86,8 +86,8 @@ CREATE TABLE settings(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   geofence_radius INTEGER,
 
-    warning_threshold INTEGER,
-    danger_threshold INTEGER,
+    warning_threshold REAL,
+    danger_threshold REAL,
 
     mpu6050_calibration INTEGER,
     ultrasonic_calibration INTEGER,
@@ -112,10 +112,18 @@ CREATE TABLE settings(
     await db.execute('''
 CREATE TABLE cache_history(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT,
   title TEXT,
-  message TEXT,
-  timestamp TEXT,
-  status TEXT
+  subtitle TEXT,
+
+  status TEXT,
+
+  latitude REAL,
+  longitude REAL,
+
+  extra TEXT,
+
+  created_at TEXT
 )
 ''');
   }
@@ -215,8 +223,8 @@ CREATE TABLE cache_history(
   //Settings CRUD
   Future<int> saveSettings({
     required int geofenceRadius,
-    required int warningThreshold,
-    required int dangerThreshold,
+    required double warningThreshold,
+    required double dangerThreshold,
     required int mpu6050Calibration,
     required int ultrasonicCalibration,
     required int gpsCalibration,
@@ -242,6 +250,32 @@ CREATE TABLE cache_history(
     );
   }
 
+  Future<void> initializeSettings() async {
+    final db = await database;
+
+    final result = await db.query(
+      'settings',
+      limit: 1,
+    );
+
+    if (result.isEmpty) {
+      await db.insert(
+        'settings',
+        {
+          'geofence_radius': 50,
+          'warning_threshold': 60,
+          'danger_threshold': 30,
+          'mpu6050_calibration': 1,
+          'ultrasonic_calibration': 1,
+          'gps_calibration': 1,
+          'alert_sound': 1,
+          'vibration': 1,
+          'sound_mode': 'Normal',
+        },
+      );
+    }
+  }
+
   Future<Map<String, dynamic>?> getSettings() async {
     final db = await database;
 
@@ -260,8 +294,8 @@ CREATE TABLE cache_history(
   Future<int> updateSettings({
     required int id,
     required int geofenceRadius,
-    required int warningThreshold,
-    required int dangerThreshold,
+    required double warningThreshold,
+    required double dangerThreshold,
     required int mpu6050Calibration,
     required int ultrasonicCalibration,
     required int gpsCalibration,
@@ -492,21 +526,28 @@ CREATE TABLE cache_history(
   }
 
   //Cache History CRUD
-  Future<int> saveCacheHistory({
+  Future saveCacheHistory({
+    required String type,
     required String title,
-    required String message,
-    required String timestamp,
+    required String subtitle,
     required String status,
+    String? extra,
+    double? latitude,
+    double? longitude,
   }) async {
     final db = await database;
 
     return await db.insert(
       'cache_history',
       {
+        'type': type,
         'title': title,
-        'message': message,
-        'timestamp': timestamp,
+        'subtitle': subtitle,
         'status': status,
+        'latitude': latitude,
+        'longitude': longitude,
+        'extra': extra,
+        'created_at': DateTime.now().toIso8601String(),
       },
     );
   }
@@ -516,7 +557,7 @@ CREATE TABLE cache_history(
 
     return await db.query(
       'cache_history',
-      orderBy: 'id DESC',
+      orderBy: 'created_at DESC',
     );
   }
 

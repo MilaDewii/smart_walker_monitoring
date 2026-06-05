@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
+import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
+import '../database/database_helper.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -11,6 +14,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  String _namaUser = 'User';
+  File? _fotoFile;
   // ── 1. GEOFENCE ──────────────────────────────────────
   double _safeRadius = 50.0; // meter
 
@@ -36,9 +41,142 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // final bool _sim808Status = false;
 
   // ── 7. EMERGENCY CONTACT ─────────────────────────────
-  String _emergencyName = 'Mila Dewi';
-  String _emergencyPhone = '+62 812 3456 7890';
-  String _emergencyRelation = 'Anak';
+  int? _emergencyId;
+
+  List<Map<String, dynamic>> _emergencyContacts = [];
+  String _emergencyName = '';
+  String _emergencyPhone = '';
+  String _emergencyRelation = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+    _loadSettings();
+    _loadEmergencyContact();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await DatabaseHelper.instance.getProfile();
+    if (!mounted) return;
+    setState(() {
+      _namaUser = profile?['nama']?.toString() ?? 'User';
+
+      final fotoPath = profile?['foto']?.toString() ?? '';
+
+      if (fotoPath.isNotEmpty && File(fotoPath).existsSync()) {
+        _fotoFile = File(fotoPath);
+      } else {
+        _fotoFile = null;
+      }
+    });
+  }
+
+  Future<void> _loadSettings() async {
+    final settings = await DatabaseHelper.instance.getSettings();
+
+    if (!mounted) return;
+
+    if (settings != null) {
+      setState(() {
+        _safeRadius = (settings['geofence_radius'] ?? 50).toDouble();
+
+        _warningThreshold = (settings['warning_threshold'] ?? 0.7).toDouble();
+
+        _dangerThreshold = (settings['danger_threshold'] ?? 1.0).toDouble();
+
+        _calibMPU = (settings['mpu6050_calibration'] ?? 0) == 1;
+
+        _calibUltrasonic = (settings['ultrasonic_calibration'] ?? 0) == 1;
+
+        _calibGPS = (settings['gps_calibration'] ?? 0) == 1;
+
+        _alertSound = (settings['alert_sound'] ?? 1) == 1;
+
+        _vibration = (settings['vibration'] ?? 1) == 1;
+
+        _soundMode = settings['sound_mode'] ?? 'Normal';
+      });
+    }
+  }
+
+  Future<void> _loadEmergencyContact() async {
+    final contacts = await DatabaseHelper.instance.getEmergencyContacts();
+
+    if (!mounted) return;
+
+    setState(() {
+      _emergencyContacts = contacts;
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    final settings = await DatabaseHelper.instance.getSettings();
+
+    if (settings == null) {
+      await DatabaseHelper.instance.saveSettings(
+        geofenceRadius: _safeRadius.toInt(),
+        warningThreshold: _warningThreshold,
+        dangerThreshold: _dangerThreshold,
+        mpu6050Calibration: _calibMPU ? 1 : 0,
+        ultrasonicCalibration: _calibUltrasonic ? 1 : 0,
+        gpsCalibration: _calibGPS ? 1 : 0,
+        alertSound: _alertSound ? 1 : 0,
+        vibration: _vibration ? 1 : 0,
+        soundMode: _soundMode,
+      );
+    } else {
+      await DatabaseHelper.instance.updateSettings(
+        id: settings['id'],
+        geofenceRadius: _safeRadius.toInt(),
+        warningThreshold: _warningThreshold,
+        dangerThreshold: _dangerThreshold,
+        mpu6050Calibration: _calibMPU ? 1 : 0,
+        ultrasonicCalibration: _calibUltrasonic ? 1 : 0,
+        gpsCalibration: _calibGPS ? 1 : 0,
+        alertSound: _alertSound ? 1 : 0,
+        vibration: _vibration ? 1 : 0,
+        soundMode: _soundMode,
+      );
+    }
+  }
+
+  Future<void> _callEmergencyContact(String phone) async {
+    final cleanNumber = phone.replaceAll(' ', '').replaceAll('-', '');
+
+    final Uri phoneUri = Uri(
+      scheme: 'tel',
+      path: cleanNumber,
+    );
+
+    await launchUrl(
+      phoneUri,
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  Future<void> _saveEmergencyContact() async {
+    if (_emergencyId == null) {
+      // simpan baru
+
+      await DatabaseHelper.instance.saveEmergencyContact(
+        contactName: _emergencyName,
+        contactNumber: _emergencyPhone,
+        relationship: _emergencyRelation,
+      );
+    } else {
+      // update data lama
+
+      await DatabaseHelper.instance.updateEmergencyContact(
+        id: _emergencyId!,
+        contactName: _emergencyName,
+        contactNumber: _emergencyPhone,
+        relationship: _emergencyRelation,
+      );
+    }
+
+    await _loadEmergencyContact();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,14 +232,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           CircleAvatar(
             radius: 22,
             backgroundColor: AppColors.primary.withOpacity(0.15),
-            child: Text(
-              _emergencyName.isNotEmpty ? _emergencyName[0].toUpperCase() : '?',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
+            backgroundImage: _fotoFile != null ? FileImage(_fotoFile!) : null,
+            child: _fotoFile == null
+                ? Text(
+                    _namaUser.isNotEmpty ? _namaUser[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -109,7 +250,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hallo, $_emergencyName',
+                  'Hallo, $_namaUser',
                   style: TextStyle(fontSize: 12, color: AppColors.textGrey),
                 ),
                 Text(
@@ -133,9 +274,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: EdgeInsets.zero,
               icon: const Icon(Icons.notifications_outlined,
                   color: Colors.white, size: 22),
-              onPressed: () {
-                Navigator.pushNamed(context, AppRoutes.notification);
-              },
+              onPressed: () =>
+                  Navigator.pushNamed(context, AppRoutes.notification),
             ),
           ),
         ],
@@ -232,7 +372,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               min: 10,
               max: 500,
               divisions: 49,
-              onChanged: (v) => setState(() => _safeRadius = v),
+              onChanged: (v) {
+                setState(() {
+                  _safeRadius = v;
+                });
+
+                _saveSettings();
+              },
             ),
           ),
           Row(
@@ -315,7 +461,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             max: 0.9,
             onChanged: (v) {
               if (v < _dangerThreshold) {
-                setState(() => _warningThreshold = v);
+                setState(() {
+                  _warningThreshold = v;
+                });
+
+                _saveSettings();
               }
             },
           ),
@@ -330,7 +480,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             max: 2.0,
             onChanged: (v) {
               if (v > _warningThreshold) {
-                setState(() => _dangerThreshold = v);
+                setState(() {
+                  _dangerThreshold = v;
+                });
+                _saveSettings();
               }
             },
           ),
@@ -436,7 +589,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.sensors,
             isDone: _calibMPU,
             onCalibrate: () => _runCalibration('MPU6050', () {
-              setState(() => _calibMPU = true);
+              setState(() {
+                _calibMPU = true;
+              });
+
+              _saveSettings();
             }),
           ),
           _buildDivider(),
@@ -446,7 +603,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.radar,
             isDone: _calibUltrasonic,
             onCalibrate: () => _runCalibration('Ultrasonic', () {
-              setState(() => _calibUltrasonic = true);
+              setState(() {
+                _calibUltrasonic = true;
+              });
+              _saveSettings();
             }),
           ),
           _buildDivider(),
@@ -456,17 +616,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.gps_fixed,
             isDone: _calibGPS,
             onCalibrate: () => _runCalibration('GPS', () {
-              setState(() => _calibGPS = true);
+              setState(() {
+                _calibGPS = true;
+              });
+
+              _saveSettings();
             }),
           ),
           if (_calibMPU || _calibUltrasonic || _calibGPS) ...[
             const SizedBox(height: 12),
             GestureDetector(
-              onTap: () => setState(() {
-                _calibMPU = false;
-                _calibUltrasonic = false;
-                _calibGPS = false;
-              }),
+              onTap: () async {
+                setState(() {
+                  _calibMPU = false;
+                  _calibUltrasonic = false;
+                  _calibGPS = false;
+                });
+
+                await _saveSettings();
+              },
               child: Text(
                 'Reset semua kalibrasi',
                 style: TextStyle(
@@ -614,7 +782,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             label: 'Alert Sound',
             subtitle: 'Putar suara saat deteksi bahaya',
             value: _alertSound,
-            onChanged: (v) => setState(() => _alertSound = v),
+            onChanged: (v) {
+              setState(() {
+                _alertSound = v;
+              });
+
+              _saveSettings();
+            },
           ),
           _buildDivider(),
           // Vibration toggle
@@ -624,7 +798,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             label: 'Vibration',
             subtitle: 'Getar saat ada peringatan',
             value: _vibration,
-            onChanged: (v) => setState(() => _vibration = v),
+            onChanged: (v) {
+              setState(() {
+                _vibration = v;
+              });
+
+              _saveSettings();
+            },
           ),
           _buildDivider(),
           // Sound Mode selector
@@ -668,7 +848,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: ['Silent', 'Normal', 'Loud'].map((mode) {
                       final bool selected = _soundMode == mode;
                       return GestureDetector(
-                        onTap: () => setState(() => _soundMode = mode),
+                        onTap: () {
+                          setState(() {
+                            _soundMode = mode;
+                          });
+
+                          _saveSettings();
+                        },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           padding: const EdgeInsets.symmetric(
@@ -932,101 +1118,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Emergency Contact', Icons.contact_phone_outlined,
-              AppColors.statusRed),
-          const SizedBox(height: 4),
-          Text('Kontak yang dihubungi saat bahaya',
-              style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-          const SizedBox(height: 16),
-          // Contact card
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.statusRed.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.statusRed.withOpacity(0.2)),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
-                  child: Text(
-                    _emergencyName.isNotEmpty
-                        ? _emergencyName[0].toUpperCase()
-                        : '?',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _emergencyName,
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textDark),
-                      ),
-                      Text(
-                        '$_emergencyRelation  •  $_emergencyPhone',
-                        style:
-                            TextStyle(fontSize: 12, color: AppColors.textGrey),
-                      ),
-                    ],
-                  ),
-                ),
-                // Edit button
-                GestureDetector(
-                  onTap: () => _showEditEmergencyContact(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.statusRed.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.edit_outlined,
-                        color: AppColors.statusRed, size: 18),
-                  ),
-                ),
-              ],
+          _buildSectionTitle(
+            'Emergency Contact',
+            Icons.contact_phone_outlined,
+            AppColors.statusRed,
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            'Kontak yang dihubungi saat bahaya',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textGrey,
             ),
           ),
+
+          const SizedBox(height: 16),
+
+          // LIST KONTAK
+          ..._emergencyContacts.map((contact) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.statusRed.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.statusRed.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    child: Text(
+                      contact['contact_name'][0].toUpperCase(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          contact['contact_name'],
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          "${contact['relationship']} • ${contact['contact_number']}",
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.call),
+                    onPressed: () async {
+                      await _callEmergencyContact(
+                        contact['contact_number'],
+                      );
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () {
+                      _showEditEmergencyContact(
+                        context,
+                        contact,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            );
+          }),
+
           const SizedBox(height: 12),
-          // Call test button
+
+          // TOMBOL TAMBAH
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
+            child: ElevatedButton.icon(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Simulasi panggilan ke $_emergencyPhone...'),
-                    backgroundColor: AppColors.primary,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                );
+                _showAddEmergencyContact();
               },
-              icon: Icon(Icons.call_outlined,
-                  color: AppColors.statusRed, size: 16),
-              label: Text('Test Panggilan Darurat',
-                  style: TextStyle(
-                      color: AppColors.statusRed,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-                side: BorderSide(color: AppColors.statusRed.withOpacity(0.4)),
-              ),
+              icon: const Icon(Icons.add),
+              label: const Text("Tambah Emergency Contact"),
             ),
           ),
         ],
@@ -1034,16 +1212,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showEditEmergencyContact(BuildContext context) {
-    final nameCtrl = TextEditingController(text: _emergencyName);
-    final phoneCtrl = TextEditingController(text: _emergencyPhone);
-    final relCtrl = TextEditingController(text: _emergencyRelation);
+  void _showEditEmergencyContact(
+    BuildContext context,
+    Map<String, dynamic> contact,
+  ) {
+    final nameCtrl = TextEditingController(
+      text: contact['contact_name'],
+    );
+
+    final phoneCtrl = TextEditingController(
+      text: contact['contact_number'],
+    );
+
+    final relCtrl = TextEditingController(
+      text: contact['relationship'],
+    );
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(20),
+        ),
+      ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
           left: 24,
@@ -1057,58 +1249,142 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.contact_phone_outlined, color: AppColors.statusRed),
+                Icon(
+                  Icons.contact_phone_outlined,
+                  color: AppColors.statusRed,
+                ),
                 const SizedBox(width: 8),
-                Text('Edit Emergency Contact',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark)),
+                Text(
+                  'Edit Emergency Contact',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            _buildContactField(nameCtrl, Icons.person_outline, 'Nama Kontak'),
-            const SizedBox(height: 12),
-            _buildContactField(phoneCtrl, Icons.phone_outlined, 'Nomor HP',
-                type: TextInputType.phone),
+            _buildContactField(
+              nameCtrl,
+              Icons.person_outline,
+              'Nama Kontak',
+            ),
             const SizedBox(height: 12),
             _buildContactField(
-                relCtrl, Icons.people_outline, 'Hubungan (misal: Anak, Istri)'),
+              phoneCtrl,
+              Icons.phone_outlined,
+              'Nomor HP',
+              type: TextInputType.phone,
+            ),
+            const SizedBox(height: 12),
+            _buildContactField(
+              relCtrl,
+              Icons.people_outline,
+              'Hubungan',
+            ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _emergencyName = nameCtrl.text.trim();
-                    _emergencyPhone = phoneCtrl.text.trim();
-                    _emergencyRelation = relCtrl.text.trim();
-                  });
+                onPressed: () async {
+                  _emergencyId = contact['id'];
+
+                  _emergencyName = nameCtrl.text.trim();
+
+                  _emergencyPhone = phoneCtrl.text.trim();
+
+                  _emergencyRelation = relCtrl.text.trim();
+
+                  await _saveEmergencyContact();
+
                   Navigator.pop(ctx);
+
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content:
-                          const Text('Emergency contact berhasil diperbarui!'),
+                      content: const Text(
+                        'Emergency contact berhasil diperbarui!',
+                      ),
                       backgroundColor: AppColors.statusGreen,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
                     ),
                   );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.statusRed,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                  ),
                 ),
-                child: const Text('Simpan',
-                    style: TextStyle(color: Colors.white, fontSize: 14)),
+                child: const Text(
+                  'Simpan',
+                  style: TextStyle(
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showAddEmergencyContact() {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final relationCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildContactField(
+                nameCtrl,
+                Icons.person,
+                "Nama",
+              ),
+              const SizedBox(height: 12),
+              _buildContactField(
+                phoneCtrl,
+                Icons.phone,
+                "Nomor HP",
+                type: TextInputType.phone,
+              ),
+              const SizedBox(height: 12),
+              _buildContactField(
+                relationCtrl,
+                Icons.people,
+                "Hubungan",
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () async {
+                  await DatabaseHelper.instance.saveEmergencyContact(
+                    contactName: nameCtrl.text,
+                    contactNumber: phoneCtrl.text,
+                    relationship: relationCtrl.text,
+                  );
+
+                  await _loadEmergencyContact();
+
+                  Navigator.pop(ctx);
+                },
+                child: const Text("Simpan"),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

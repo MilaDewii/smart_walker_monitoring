@@ -1,8 +1,14 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
+import '../database/database_helper.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -11,7 +17,20 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+class _MonitoringStats {
+  const _MonitoringStats({
+    required this.total,
+    required this.danger,
+    required this.warning,
+  });
+
+  final int total;
+  final int danger;
+  final int warning;
+}
+
 class _ProfileScreenState extends State<ProfileScreen> {
+  final DatabaseHelper _db = DatabaseHelper.instance;
   bool _isEditing = false;
 
   // ── DATA USER ──
@@ -35,60 +54,287 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _jenisKelaminLansia = 'Perempuan';
 
   // ── DATA DEVICE WALKER ──
-  final String _walkerId = 'GW-001';
-  final String _statusDevice = 'Connected';
-  final int _battery = 89;
+  String _walkerId = '-';
+  String _statusDevice = 'Belum Terhubung';
+  // final int _battery = 89;
+  StreamSubscription<DatabaseEvent>? _walkerSub;
+  StreamSubscription<DatabaseEvent>? _firebaseConnectedSub;
 
   // ── STATUS KONEKSI ──
   // final bool _wifi = true;
   // final bool _bluetooth = true;
-  final bool _gps = true;
-  final bool _gsm = false;
-  final bool _firebaseRtd = false;
+  bool _gps = false;
+  bool _gsm = false;
+  bool _firebaseRtd = false;
 
   // ── STATISTIK MONITORING ──
-  final int _totalMonitoring = 128;
-  final int _riwayatBahaya = 4;
-  final int _riwayatWarning = 12;
+  int _totalMonitoring = 0;
+  int _riwayatBahaya = 0;
+  int _riwayatWarning = 0;
+
+  Future<void> _loadProfile() async {
+    final profile = await _db.getProfile();
+    final pairedWalkers = await _db.getPairedWalkers();
+    final resolvedWalkerId = await _resolveWalkerId(pairedWalkers);
+
+    if (!mounted) return;
+
+    setState(() {
+      if (profile != null) {
+        _namaLengkap = profile['nama'] ?? '';
+        _email = profile['email'] ?? '';
+        _noHp = profile['no_hp'] ?? '';
+
+        _namaLansia = profile['nama_lansia'] ?? '';
+        _umurLansia = profile['umur_lansia']?.toString() ?? '';
+
+        _jenisKelaminLansia = profile['jenis_kelamin_lansia'] ?? '';
+
+        final fotoPath = profile['foto']?.toString() ?? '';
+        if (fotoPath.isNotEmpty && File(fotoPath).existsSync()) {
+          _fotoFile = File(fotoPath);
+        } else {
+          _fotoFile = null;
+        }
+      }
+
+      if (resolvedWalkerId != null) {
+        _walkerId = resolvedWalkerId;
+      } else {
+        _walkerId = '-';
+        _statusDevice = 'Belum Terhubung';
+        _gps = false;
+        _gsm = false;
+        _totalMonitoring = 0;
+        _riwayatBahaya = 0;
+        _riwayatWarning = 0;
+      }
+    });
+
+    _listenFirebaseConnection();
+    if (_walkerId != '-') {
+      _listenWalkerProfile(_walkerId);
+    }
+  }
+
+  Future<String?> _resolveWalkerId(
+    List<Map<String, dynamic>> pairedWalkers,
+  ) async {
+    final storedWalker = pairedWalkers.isNotEmpty ? pairedWalkers.first : null;
+    final storedId = storedWalker?['walker_id']?.toString();
+    final candidates = <String>[
+      if (storedId != null && storedId.isNotEmpty) ...[
+        if (_legacyWalkerAlias(storedId) != null) _legacyWalkerAlias(storedId)!,
+        storedId,
+      ],
+      'walker_001',
+    ];
+
+    for (final candidate in candidates.toSet()) {
+      final snapshot =
+          await FirebaseDatabase.instance.ref('Walkers/$candidate').get();
+      if (!snapshot.exists) continue;
+
+      if (storedWalker == null) {
+        await _db.savePairedWalker(
+          walkerId: candidate,
+          pairedDate: DateTime.now().toIso8601String(),
+        );
+      } else if (storedId != candidate) {
+        await _db.updatePairedWalker(
+          id: storedWalker['id'] as int,
+          walkerId: candidate,
+          pairedDate: storedWalker['paired_date']?.toString() ??
+              DateTime.now().toIso8601String(),
+        );
+      }
+
+      return candidate;
+    }
+
+    return storedId?.isNotEmpty == true ? storedId : null;
+  }
+
+  String? _legacyWalkerAlias(String walkerId) {
+    final match = RegExp(r'^GW-(\d+)$', caseSensitive: false).firstMatch(
+      walkerId.trim(),
+    );
+    if (match == null) return null;
+
+    final number = int.tryParse(match.group(1) ?? '');
+    if (number == null) return null;
+
+    return 'walker_${number.toString().padLeft(3, '0')}';
+  }
+
+  void _listenFirebaseConnection() {
+    _firebaseConnectedSub?.cancel();
+    _firebaseConnectedSub = FirebaseDatabase.instance
+        .ref('.info/connected')
+        .onValue
+        .listen((event) {
+      if (!mounted) return;
+      setState(() => _firebaseRtd = event.snapshot.value == true);
+    });
+  }
+
+  void _listenWalkerProfile(String walkerId) {
+    _walkerSub?.cancel();
+    _walkerSub = FirebaseDatabase.instance
+        .ref('Walkers/$walkerId')
+        .onValue
+        .listen((event) {
+      if (!mounted) return;
+
+      final raw = event.snapshot.value;
+      if (raw is! Map) {
+        setState(() {
+          _statusDevice = 'Offline';
+          _gps = false;
+          _gsm = false;
+          _totalMonitoring = 0;
+          _riwayatBahaya = 0;
+          _riwayatWarning = 0;
+        });
+        return;
+      }
+
+      final walker = Map<dynamic, dynamic>.from(raw);
+      final status = _asMap(walker['status']);
+      final sensors = _asMap(walker['sensors']);
+      final sim808 = _asMap(walker['sim808']).isNotEmpty
+          ? _asMap(walker['sim808'])
+          : _asMap(sensors['sim808']);
+      final history = _asMap(walker['history']);
+
+      final isConnected = status['connected'] == true ||
+          status['walker_active'] == true ||
+          walker['connected'] == true;
+      final stats = _countMonitoringStats(history);
+
+      setState(() {
+        _statusDevice = isConnected ? 'Connected' : 'Offline';
+        _gps = sim808['gps_status'] == true;
+        _gsm = sim808['internet_status'] == true ||
+            _toDouble(sim808['gsm_signal'], 0) > 0;
+        _totalMonitoring = stats.total;
+        _riwayatBahaya = stats.danger;
+        _riwayatWarning = stats.warning;
+      });
+    });
+  }
+
+  _MonitoringStats _countMonitoringStats(Map<dynamic, dynamic> history) {
+    var total = 0;
+    var danger = 0;
+    var warning = 0;
+
+    for (final value in history.values) {
+      if (value is! Map) continue;
+      total++;
+
+      final item = Map<dynamic, dynamic>.from(value);
+      final status = item['status']?.toString().toLowerCase() ?? '';
+      final statusBahaya = item['statusBahaya']?.toString().toLowerCase() ?? '';
+
+      if (status == 'danger' ||
+          status == 'bahaya' ||
+          statusBahaya.contains('bahaya')) {
+        danger++;
+      } else if (status == 'warning' ||
+          status == 'peringatan' ||
+          statusBahaya.contains('peringatan') ||
+          statusBahaya.contains('warning')) {
+        warning++;
+      }
+    }
+
+    return _MonitoringStats(
+      total: total,
+      danger: danger,
+      warning: warning,
+    );
+  }
+
+  Map<dynamic, dynamic> _asMap(dynamic value) =>
+      value is Map ? Map<dynamic, dynamic>.from(value) : {};
+
+  double _toDouble(dynamic value, double fallback) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? fallback;
+    return fallback;
+  }
 
   @override
   void initState() {
     super.initState();
-    _namaCtrl = TextEditingController(text: _namaLengkap);
-    _emailCtrl = TextEditingController(text: _email);
-    _noHpCtrl = TextEditingController(text: _noHp);
+
+    _namaCtrl = TextEditingController();
+    _emailCtrl = TextEditingController();
+    _noHpCtrl = TextEditingController();
+
+    _loadProfile();
   }
 
   @override
   void dispose() {
+    _walkerSub?.cancel();
+    _firebaseConnectedSub?.cancel();
     _namaCtrl.dispose();
     _emailCtrl.dispose();
     _noHpCtrl.dispose();
     super.dispose();
   }
 
-  void _toggleEdit() {
+  Future<void> _toggleEdit() async {
     if (_isEditing) {
+      final profile = await _db.getProfile();
+
+      if (profile == null) {
+        // simpan baru
+        await _db.saveProfile(
+          nama: _namaCtrl.text.trim(),
+          email: _emailCtrl.text.trim(),
+          noHp: _noHpCtrl.text.trim(),
+          foto: _fotoFile?.path ?? '',
+          namaLansia: _namaLansia,
+          umurLansia: int.parse(_umurLansia),
+          jenisKelaminLansia: _jenisKelaminLansia,
+        );
+      } else {
+        // update
+        await _db.updateProfile(
+          id: profile['id'],
+          nama: _namaCtrl.text.trim(),
+          email: _emailCtrl.text.trim(),
+          noHp: _noHpCtrl.text.trim(),
+          foto: _fotoFile?.path ?? '',
+          namaLansia: _namaLansia,
+          umurLansia: int.parse(_umurLansia),
+          jenisKelaminLansia: _jenisKelaminLansia,
+        );
+      }
+
       setState(() {
         _namaLengkap = _namaCtrl.text.trim();
         _email = _emailCtrl.text.trim();
         _noHp = _noHpCtrl.text.trim();
+
         _isEditing = false;
       });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Profil berhasil disimpan!'),
+          content: const Text("Profil berhasil disimpan"),
           backgroundColor: AppColors.statusGreen,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     } else {
+      _namaCtrl.text = _namaLengkap;
+      _emailCtrl.text = _email;
+      _noHpCtrl.text = _noHp;
+
       setState(() {
-        _namaCtrl.text = _namaLengkap;
-        _emailCtrl.text = _email;
-        _noHpCtrl.text = _noHp;
         _isEditing = true;
       });
     }
@@ -107,8 +353,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: source, imageQuality: 80);
     if (picked != null) {
-      setState(() => _fotoFile = File(picked.path));
+      final savedPhoto = await _copyPhotoToAppStorage(File(picked.path));
+      await _saveProfilePhoto(savedPhoto.path);
+
+      if (!mounted) return;
+      setState(() => _fotoFile = savedPhoto);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Foto profil berhasil disimpan'),
+          backgroundColor: AppColors.statusGreen,
+        ),
+      );
     }
+  }
+
+  Future<File> _copyPhotoToAppStorage(File source) async {
+    final dbPath = await getDatabasesPath();
+    final photoDir = Directory(p.join(dbPath, 'profile_photos'));
+    if (!await photoDir.exists()) {
+      await photoDir.create(recursive: true);
+    }
+
+    final extension = p.extension(source.path);
+    final fileName =
+        'profile_${DateTime.now().millisecondsSinceEpoch}$extension';
+    return source.copy(p.join(photoDir.path, fileName));
+  }
+
+  Future<void> _saveProfilePhoto(String path) async {
+    final profile = await _db.getProfile();
+    if (profile == null) return;
+
+    await _db.updateProfile(
+      id: profile['id'],
+      nama: _namaLengkap,
+      email: _email,
+      noHp: _noHp,
+      foto: path,
+      namaLansia: _namaLansia,
+      umurLansia: int.tryParse(_umurLansia) ?? 0,
+      jenisKelaminLansia: _jenisKelaminLansia,
+    );
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    final oldPhoto = _fotoFile;
+    await _saveProfilePhoto('');
+
+    if (oldPhoto != null && await oldPhoto.exists()) {
+      await oldPhoto.delete();
+    }
+
+    if (!mounted) return;
+    setState(() => _fotoFile = null);
   }
 
   void _showPilihFotoSheet() {
@@ -158,9 +456,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: TextButton.icon(
-                    onPressed: () {
-                      setState(() => _fotoFile = null);
+                    onPressed: () async {
                       Navigator.pop(ctx);
+                      await _removeProfilePhoto();
                     },
                     icon: Icon(Icons.delete_outline,
                         color: AppColors.statusRed, size: 18),
@@ -537,87 +835,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
- // ── INFORMASI DEVICE WALKER ──────────────────────────
-Widget _buildInfoWalker() {
-  final bool isConnected = _statusDevice == 'Connected';
-  return _buildCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle('Device Walker', Icons.directions_walk),
-        const SizedBox(height: 12),
-
-        _buildInfoRow(Icons.qr_code_2, 'Walker ID', _walkerId),
-        _buildDivider(),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            children: [
-              Icon(Icons.wifi_tethering, color: AppColors.textGrey, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text('Status Device',
-                    style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (isConnected ? AppColors.statusGreen : AppColors.statusRed)
-                      .withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
+  // ── INFORMASI DEVICE WALKER ──────────────────────────
+  Widget _buildInfoWalker() {
+    final bool isConnected = _statusDevice == 'Connected';
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('Device Walker', Icons.directions_walk),
+          const SizedBox(height: 12),
+          _buildInfoRow(Icons.qr_code_2, 'Walker ID', _walkerId),
+          _buildDivider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.wifi_tethering, color: AppColors.textGrey, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Status Device',
+                      style:
+                          TextStyle(fontSize: 13, color: AppColors.textGrey)),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isConnected ? AppColors.statusGreen : AppColors.statusRed,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (isConnected
+                            ? AppColors.statusGreen
+                            : AppColors.statusRed)
+                        .withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isConnected
+                              ? AppColors.statusGreen
+                              : AppColors.statusRed,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(_statusDevice,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isConnected
-                                ? AppColors.statusGreen
-                                : AppColors.statusRed)),
-                  ],
+                      const SizedBox(width: 6),
+                      Text(_statusDevice,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isConnected
+                                  ? AppColors.statusGreen
+                                  : AppColors.statusRed)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
-} // 
+        ],
+      ),
+    );
+  } //
 
 // ── STATUS KONEKSI ───────────────────────────────────  ✅ Sekarang di luar _buildInfoWalker
-Widget _buildStatusKoneksi() {
-  return _buildCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle('Status Koneksi', Icons.signal_cellular_alt),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            _buildKoneksiChip(Icons.signal_cellular_alt, 'GSM Network', _gsm),
-            const SizedBox(width: 8),
-            _buildKoneksiChip(Icons.gps_fixed, 'GPS', _gps),
-            const SizedBox(width: 8),
-            _buildKoneksiChip(Icons.cloud_done, 'Firebase RTD', _firebaseRtd),
-          ],
-        ),
-      ],
-    ),
-  );
-}
+  Widget _buildStatusKoneksi() {
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('Status Koneksi', Icons.signal_cellular_alt),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildKoneksiChip(Icons.signal_cellular_alt, 'GSM Network', _gsm),
+              const SizedBox(width: 8),
+              _buildKoneksiChip(Icons.gps_fixed, 'GPS', _gps),
+              const SizedBox(width: 8),
+              _buildKoneksiChip(Icons.cloud_done, 'Firebase RTD', _firebaseRtd),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildKoneksiChip(IconData icon, String label, bool aktif) {
     return Expanded(
@@ -991,18 +1293,37 @@ Widget _buildStatusKoneksi() {
             child: const Text('Batal'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
+
+              await _logout();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.statusRed,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            child: const Text('Keluar', style: TextStyle(color: Colors.white)),
-          ),
+            child: const Text(
+              'Keluar',
+              style: TextStyle(color: Colors.white),
+            ),
+          )
         ],
       ),
+    );
+  }
+
+  Future<void> _logout() async {
+    // hapus session login
+    await DatabaseHelper.instance.logout();
+
+    if (!mounted) return;
+
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.login,
+      (route) => false,
     );
   }
 

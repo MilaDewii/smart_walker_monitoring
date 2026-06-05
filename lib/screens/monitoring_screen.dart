@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -19,10 +20,11 @@ class MonitoringScreen extends StatefulWidget {
 }
 
 class _MonitoringScreenState extends State<MonitoringScreen> {
-
   // ── Data ──────────────────────────────────
-  String     _namaLansia = 'Nama Lansia';
-  String?    _walkerId;
+  String _namaUser = 'User';
+  String _namaLansia = 'Nama Lansia';
+  File? _fotoFile;
+  String? _walkerId;
   WalkerData _walkerData = WalkerData.empty();
 
   StreamSubscription<WalkerData>? _walkerSub;
@@ -34,25 +36,25 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   // ── Events lokal ──────────────────────────
   final List<Map<String, String>> _events = [
     {
-      'id'         : 'e1',
-      'title'      : 'Anomali Gerakan',
+      'id': 'e1',
+      'title': 'Anomali Gerakan',
       'description': 'Perubahan pola gerak tidak biasa terdeteksi',
-      'time'       : '10:47',
-      'date'       : '2025-04-08',
+      'time': '10:47',
+      'date': '2025-04-08',
     },
     {
-      'id'         : 'e2',
-      'title'      : 'Potensi Jatuh',
+      'id': 'e2',
+      'title': 'Potensi Jatuh',
       'description': 'Sensor mendeteksi benturan dan penurunan akselerasi',
-      'time'       : '11:00',
-      'date'       : '2025-04-08',
+      'time': '11:00',
+      'date': '2025-04-08',
     },
     {
-      'id'         : 'e3',
-      'title'      : 'Update Lokasi',
+      'id': 'e3',
+      'title': 'Update Lokasi',
       'description': 'Lansia bergerak ke koordinat baru',
-      'time'       : '11:05',
-      'date'       : '2025-04-08',
+      'time': '11:05',
+      'date': '2025-04-08',
     },
   ];
 
@@ -64,7 +66,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   }
 
   Future<void> _init() async {
-    final profile       = await DatabaseHelper.instance.getProfile();
+    final profile = await DatabaseHelper.instance.getProfile();
     final pairedWalkers = await DatabaseHelper.instance.getPairedWalkers();
 
     if (!mounted) return;
@@ -75,14 +77,21 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
 
     setState(() {
       _namaLansia = profile?['nama_lansia']?.toString() ?? _namaLansia;
-      _walkerId   = walkerId;
+      _namaUser = profile?['nama']?.toString() ?? 'User'; // tambahkan ini
+      _walkerId = walkerId;
+
+      final fotoPath = profile?['foto']?.toString() ?? '';
+      if (fotoPath.isNotEmpty && File(fotoPath).existsSync()) {
+        _fotoFile = File(fotoPath);
+      } else {
+        _fotoFile = null;
+      }
     });
 
     if (walkerId == null || walkerId.isEmpty) return;
 
-    _walkerSub = MonitoringService.instance
-        .watchWalker(walkerId)
-        .listen((data) {
+    _walkerSub =
+        MonitoringService.instance.watchWalker(walkerId).listen((data) {
       if (!mounted) return;
       setState(() => _walkerData = data);
     });
@@ -98,27 +107,30 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   // ═══════════════════════════════════════════
   // GETTER dari WalkerData
   // ═══════════════════════════════════════════
-  String get _status          => _walkerData.status;
-  bool   get _jatuh           => _walkerData.jatuh;
-  double get _confidence      => _walkerData.fallConfidence;
-  double get _impact          => _walkerData.fallImpact;
-  LatLng get _posisi          => _walkerData.position;
-  bool   get _gpsAktif        => _walkerData.gpsAktif;
-  bool   get _mpuAktif        => _walkerData.mpuAktif;
-  bool   get _ultraFront      => _walkerData.ultrasonicFront;
-  bool   get _ultraBack       => _walkerData.ultrasonicBack;
-  bool   get _walkerActive    => _walkerData.walkerActive;
-  String get _geofence        => _walkerData.geofenceStatus;
-  double get _geofenceRadius  => _walkerData.geofenceRadius;
-  LatLng get _geofenceCenter  => _walkerData.geofenceCenter;
-  String get _lastUpdate      => _walkerData.lastUpdate;
+  String get _status => _walkerData.status;
+  bool get _jatuh => _walkerData.jatuh;
+  double get _confidence => _walkerData.fallConfidence;
+  double get _impact => _walkerData.fallImpact;
+  LatLng get _posisi => _walkerData.position;
+  bool get _gpsAktif => _walkerData.gpsAktif;
+  bool get _mpuAktif => _walkerData.mpuAktif;
+  bool get _ultraFront => _walkerData.ultrasonicFront;
+  bool get _ultraBack => _walkerData.ultrasonicBack;
+  bool get _walkerActive => _walkerData.walkerActive;
+  String get _geofence => _walkerData.geofenceStatus;
+  double get _geofenceRadius => _walkerData.geofenceRadius;
+  LatLng get _geofenceCenter => _walkerData.geofenceCenter;
+  String get _lastUpdate => _walkerData.lastUpdate;
 
   // ── Status helpers ────────────────────────
   Color get _statusColor {
     switch (_status) {
-      case 'bahaya'    : return AppColors.statusRed;
-      case 'peringatan': return AppColors.statusYellow;
-      default          : return AppColors.statusGreen;
+      case 'bahaya':
+        return AppColors.statusRed;
+      case 'peringatan':
+        return AppColors.statusYellow;
+      default:
+        return AppColors.statusGreen;
     }
   }
 
@@ -131,33 +143,45 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   // ── Asset helpers ─────────────────────────
   String get _asetOrang {
     switch (_status) {
-      case 'bahaya'    : return 'assets/images/org merah.png';
-      case 'peringatan': return 'assets/images/org kuning.svg';
-      default          : return 'assets/images/org ijo.png';
+      case 'bahaya':
+        return 'assets/images/org merah.png';
+      case 'peringatan':
+        return 'assets/images/org kuning.svg';
+      default:
+        return 'assets/images/org ijo.png';
     }
   }
 
   String get _asetJatuh {
     switch (_status) {
-      case 'bahaya'    : return 'assets/images/jatuh merah.png';
-      case 'peringatan': return 'assets/images/jatuh kuning.png';
-      default          : return 'assets/images/jatuh ijo.svg';
+      case 'bahaya':
+        return 'assets/images/jatuh merah.png';
+      case 'peringatan':
+        return 'assets/images/jatuh kuning.png';
+      default:
+        return 'assets/images/jatuh ijo.svg';
     }
   }
 
   String get _asetGraf {
     switch (_status) {
-      case 'bahaya'    : return 'assets/images/graf merah.png';
-      case 'peringatan': return 'assets/images/graf kuning.svg';
-      default          : return 'assets/images/graf ijo.png';
+      case 'bahaya':
+        return 'assets/images/graf merah.png';
+      case 'peringatan':
+        return 'assets/images/graf kuning.svg';
+      default:
+        return 'assets/images/graf ijo.png';
     }
   }
 
   String get _asetPeringatan {
     switch (_status) {
-      case 'bahaya'    : return 'assets/images/peringatan merah.png';
-      case 'peringatan': return 'assets/images/peringatan kuning.png';
-      default          : return 'assets/images/peringatan ijo.svg';
+      case 'bahaya':
+        return 'assets/images/peringatan merah.png';
+      case 'peringatan':
+        return 'assets/images/peringatan kuning.png';
+      default:
+        return 'assets/images/peringatan ijo.svg';
     }
   }
 
@@ -172,12 +196,15 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   List<Map<String, String>> get _filteredEvents {
     final q = _searchQuery.trim().toLowerCase();
     if (q.isEmpty) return _events;
-    return _events.where((e) =>
-      e['title']!.toLowerCase().contains(q)       ||
-      e['description']!.toLowerCase().contains(q) ||
-      (e['time'] ?? '').toLowerCase().contains(q) ||
-      (e['date'] ?? '').toLowerCase().contains(q),
-    ).toList();
+    return _events
+        .where(
+          (e) =>
+              e['title']!.toLowerCase().contains(q) ||
+              e['description']!.toLowerCase().contains(q) ||
+              (e['time'] ?? '').toLowerCase().contains(q) ||
+              (e['date'] ?? '').toLowerCase().contains(q),
+        )
+        .toList();
   }
 
   // ═══════════════════════════════════════════
@@ -196,7 +223,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                 decoration: const BoxDecoration(
                   color: Color(0xFFB8D4F0),
                   borderRadius: BorderRadius.only(
-                    topLeft : Radius.circular(24),
+                    topLeft: Radius.circular(24),
                     topRight: Radius.circular(24),
                   ),
                 ),
@@ -246,23 +273,27 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
               CircleAvatar(
                 radius: 24,
                 backgroundColor: AppColors.primary.withOpacity(0.15),
-                child: Text(
-                  'M',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
+                backgroundImage:
+                    _fotoFile != null ? FileImage(_fotoFile!) : null,
+                child: _fotoFile == null
+                    ? Text(
+                        _namaUser.isNotEmpty ? _namaUser[0].toUpperCase() : '?',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : null,
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Hallo, Mila',
-                        style: TextStyle(
-                            fontSize: 12, color: AppColors.textGrey)),
+                    Text('Hallo, $_namaUser',
+                        style:
+                            TextStyle(fontSize: 12, color: AppColors.textGrey)),
                     Text(
                       'Monitoring $_namaLansia',
                       style: TextStyle(
@@ -277,8 +308,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
               // Badge walker aktif/offline
               Container(
                 margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: (_walkerActive
                           ? AppColors.statusGreen
@@ -290,7 +320,8 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 7, height: 7,
+                      width: 7,
+                      height: 7,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: _walkerActive
@@ -314,7 +345,8 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
               ),
               // Tombol notifikasi
               Container(
-                width: 44, height: 44,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: AppColors.primary,
                   borderRadius: BorderRadius.circular(12),
@@ -348,12 +380,11 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   child: TextField(
                     controller: _searchCtrl,
                     onChanged: (v) => setState(() => _searchQuery = v),
-                    style: TextStyle(
-                        fontSize: 13, color: AppColors.textDark),
+                    style: TextStyle(fontSize: 13, color: AppColors.textDark),
                     decoration: InputDecoration(
                       hintText: 'Cari kejadian, waktu, atau keterangan...',
-                      hintStyle: TextStyle(
-                          fontSize: 13, color: AppColors.textGrey),
+                      hintStyle:
+                          TextStyle(fontSize: 13, color: AppColors.textGrey),
                       border: InputBorder.none,
                       isDense: true,
                     ),
@@ -386,8 +417,10 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05),
-                blurRadius: 8, offset: const Offset(0, 2)),
+            BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2)),
           ],
         ),
         child: Column(
@@ -406,8 +439,8 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   const Spacer(),
                   // Badge dinamis dari RTD geofence.status
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: _geofenceBadgeColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
@@ -427,14 +460,14 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             // ── Peta ──────────────────────────────
             ClipRRect(
               borderRadius: const BorderRadius.only(
-                  bottomLeft : Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
                   bottomRight: Radius.circular(12)),
               child: SizedBox(
                 height: 180,
                 child: FlutterMap(
                   options: MapOptions(
                     initialCenter: _posisi,
-                    initialZoom  : 15,
+                    initialZoom: 15,
                   ),
                   children: [
                     TileLayer(
@@ -445,20 +478,21 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                     // Geofence circle — center & radius dari RTD
                     CircleLayer(circles: [
                       CircleMarker(
-                        point            : _geofenceCenter,
-                        radius           : _geofenceRadius,
-                        color            : _geofenceBadgeColor.withOpacity(0.12),
-                        borderColor      : _geofenceBadgeColor,
+                        point: _geofenceCenter,
+                        radius: _geofenceRadius,
+                        color: _geofenceBadgeColor.withOpacity(0.12),
+                        borderColor: _geofenceBadgeColor,
                         borderStrokeWidth: 2,
-                        useRadiusInMeter : true,
+                        useRadiusInMeter: true,
                       ),
                     ]),
                     // Marker posisi lansia
                     MarkerLayer(markers: [
                       Marker(
-                        point : _posisi,
-                        width : 40, height: 40,
-                        child : Icon(Icons.location_pin,
+                        point: _posisi,
+                        width: 40,
+                        height: 40,
+                        child: Icon(Icons.location_pin,
                             color: _statusColor, size: 40),
                       ),
                     ]),
@@ -476,14 +510,13 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                     child: Text(
                       'Lat: ${_posisi.latitude.toStringAsFixed(5)}'
                       '   Lng: ${_posisi.longitude.toStringAsFixed(5)}',
-                      style: TextStyle(
-                          fontSize: 11, color: AppColors.textGrey),
+                      style: TextStyle(fontSize: 11, color: AppColors.textGrey),
                     ),
                   ),
                   // Badge koneksi walker
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: (_walkerId != null
                               ? AppColors.statusGreen
@@ -515,8 +548,8 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                       size: 12, color: AppColors.textGrey),
                   const SizedBox(width: 4),
                   Text('Update: $_lastUpdate',
-                      style: TextStyle(
-                          fontSize: 10, color: AppColors.textGrey)),
+                      style:
+                          TextStyle(fontSize: 10, color: AppColors.textGrey)),
                 ],
               ),
             ),
@@ -568,8 +601,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                         fontWeight: FontWeight.bold,
                         color: AppColors.textDark)),
                 Text('${_walkerData.langkah} langkah hari ini',
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.textGrey)),
+                    style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
               ],
             ),
           ),
@@ -645,11 +677,11 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
           Text('Sensor yang sedang aktif',
               style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
           const SizedBox(height: 12),
-          _sensorItem('MPU6050',           _mpuAktif),
-          _sensorItem('GPS / Koneksi',     _gpsAktif),
-          _sensorItem('Ultrasonic Front',  _ultraFront),
-          _sensorItem('Ultrasonic Back',   _ultraBack),
-          _sensorItem('Walker Aktif',      _walkerActive),
+          _sensorItem('MPU6050', _mpuAktif),
+          _sensorItem('GPS / Koneksi', _gpsAktif),
+          _sensorItem('Ultrasonic Front', _ultraFront),
+          _sensorItem('Ultrasonic Back', _ultraBack),
+          _sensorItem('Walker Aktif', _walkerActive),
           const Divider(height: 20, thickness: 0.8),
           // Geofence info
           Row(
@@ -659,9 +691,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
               Text('Geofence: ',
                   style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
               Text(
-                _geofence == 'inside'
-                    ? 'Di dalam area aman'
-                    : 'Di luar area!',
+                _geofence == 'inside' ? 'Di dalam area aman' : 'Di luar area!',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -696,20 +726,22 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
         children: [
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            width: 10, height: 10,
+            width: 10,
+            height: 10,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: aktif ? AppColors.statusGreen : AppColors.statusRed,
               boxShadow: aktif
-                  ? [BoxShadow(
-                      color: AppColors.statusGreen.withOpacity(0.4),
-                      blurRadius: 4)]
+                  ? [
+                      BoxShadow(
+                          color: AppColors.statusGreen.withOpacity(0.4),
+                          blurRadius: 4)
+                    ]
                   : [],
             ),
           ),
           const SizedBox(width: 10),
-          Text(nama,
-              style: TextStyle(fontSize: 13, color: AppColors.textDark)),
+          Text(nama, style: TextStyle(fontSize: 13, color: AppColors.textDark)),
           const Spacer(),
           Text(
             aktif ? 'Aktif' : 'Tidak Aktif',
@@ -735,8 +767,10 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05),
-              blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: child,
@@ -774,8 +808,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                           fontSize: 13, fontWeight: FontWeight.w600)),
                   subtitle: Text(
                     '${e['date']} • ${e['time']}\n${e['description']}',
-                    style: TextStyle(
-                        fontSize: 11, color: AppColors.textGrey),
+                    style: TextStyle(fontSize: 11, color: AppColors.textGrey),
                   ),
                   isThreeLine: true,
                   onTap: () => ScaffoldMessenger.of(context).showSnackBar(

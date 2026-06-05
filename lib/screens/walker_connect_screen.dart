@@ -73,18 +73,21 @@ class _WalkerConnectScreenState extends State<WalkerConnectScreen> {
                   ),
                 ),
                 const Spacer(),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushReplacementNamed(
-                        context,
-                        AppRoutes.monitoring,
-                      );
-                    },
-                    child: const Text(
-                      "Mulai Monitoring",
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 40), // atur jaraknya
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushReplacementNamed(
+                          context,
+                          AppRoutes.monitoring,
+                        );
+                      },
+                      child: const Text(
+                        "Mulai Monitoring",
+                      ),
                     ),
                   ),
                 )

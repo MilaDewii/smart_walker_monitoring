@@ -10,40 +10,44 @@
 //     screen tidak berubah — langsung pakai item.extra
 //  4. category fallback ke 'type' sudah dihandle di model
 //  5. subtitle / subtittle typo dihandle di model
+//  6. Ditambahkan: _namaLansia, _walkerId dari profile service
 // ============================================================
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import '../database/database_helper.dart';
 import 'dart:ui' as ui;
 import '../utils/app_colors.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/app_routes.dart';
 import '../models/history_model.dart';
 import '../services/history_service.dart';
+import '../services/notification_service.dart';
+import 'dart:io';
 
 // ── Colors ────────────────────────────────────────────────────
 class _C {
-  static const Color primary      = AppColors.primary;
+  static const Color primary = AppColors.primary;
   static const Color primaryLight = Color(0xFFDBEAFE);
-  static const Color white        = AppColors.white;
-  static const Color textDark     = AppColors.textDark;
-  static const Color textMid      = AppColors.textGrey;
+  static const Color white = AppColors.white;
+  static const Color textDark = AppColors.textDark;
+  static const Color textMid = AppColors.textGrey;
 
-  static const Color bahayaText   = AppColors.statusRed;
-  static const Color bahayaBg     = Color(0xFFFEE2E2);
+  static const Color bahayaText = AppColors.statusRed;
+  static const Color bahayaBg = Color(0xFFFEE2E2);
   static const Color bahayaBorder = Color(0xFFFCA5A5);
 
-  static const Color warnText     = AppColors.statusYellow;
-  static const Color warnBg       = Color(0xFFFFF8E1);
-  static const Color warnBorder   = Color(0xFFFFD54F);
+  static const Color warnText = AppColors.statusYellow;
+  static const Color warnBg = Color(0xFFFFF8E1);
+  static const Color warnBorder = Color(0xFFFFD54F);
 
-  static const Color amanText     = AppColors.statusGreen;
-  static const Color amanBg       = Color(0xFFDCFCE7);
-  static const Color amanBorder   = Color(0xFF86EFAC);
+  static const Color amanText = AppColors.statusGreen;
+  static const Color amanBg = Color(0xFFDCFCE7);
+  static const Color amanBorder = Color(0xFF86EFAC);
 
-  static const Color infoText     = Color(0xFF3B82F6);
-  static const Color infoBg       = Color(0xFFEFF6FF);
-  static const Color infoBorder   = Color(0xFFBFDBFE);
+  static const Color infoText = Color(0xFF3B82F6);
+  static const Color infoBg = Color(0xFFEFF6FF);
+  static const Color infoBorder = Color(0xFFBFDBFE);
 }
 
 // ── Screen ────────────────────────────────────────────────────
@@ -54,26 +58,70 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  final _service = HistoryService(walkerId: 'walker_001');
+  // ── State: nama lansia & walker ───────────────────────────
+  String _namaLansia = 'Nama Lansia';
+  String _namaUser = 'User';
+  File? _fotoFile;
+  String? _walkerId;
+  NotificationService? _notifService;
+
+  late final HistoryService _service;
 
   String _selectedCategory = 'Semua';
-  String _sortOption       = 'Terbaru';
+  String _sortOption = 'Terbaru';
 
   final List<Map<String, dynamic>> _tabs = [
-    {'label': 'Semua',    'icon': Icons.history_rounded},
-    {'label': 'Jatuh',    'icon': Icons.personal_injury_rounded},
-    {'label': 'Warning',  'icon': Icons.warning_amber_rounded},
+    {'label': 'Semua', 'icon': Icons.history_rounded},
+    {'label': 'Jatuh', 'icon': Icons.personal_injury_rounded},
+    {'label': 'Warning', 'icon': Icons.warning_amber_rounded},
     {'label': 'Geofence', 'icon': Icons.location_off_rounded},
-    {'label': 'Sensor',   'icon': Icons.sensors_rounded},
+    {'label': 'Sensor', 'icon': Icons.sensors_rounded},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final profile = await DatabaseHelper.instance.getProfile();
+      final pairedWalkers = await DatabaseHelper.instance.getPairedWalkers();
+
+      final walkerId = pairedWalkers.isNotEmpty
+          ? pairedWalkers.first['walker_id']?.toString()
+          : 'walker_001';
+
+      if (!mounted) return;
+      setState(() {
+        _namaLansia = profile?['nama_lansia']?.toString() ?? _namaLansia;
+        _namaUser = profile?['nama']?.toString() ?? 'User';
+        _walkerId = walkerId;
+
+        final fotoPath = profile?['foto']?.toString() ?? '';
+        if (fotoPath.isNotEmpty && File(fotoPath).existsSync()) {
+          _fotoFile = File(fotoPath);
+        } else {
+          _fotoFile = null;
+        }
+      });
+
+      _service = HistoryService(walkerId: _walkerId ?? 'walker_001');
+      _notifService = NotificationService(walkerId: _walkerId ?? 'walker_001');
+    } catch (e) {
+      if (!mounted) return;
+      _service = HistoryService(walkerId: 'walker_001');
+    }
+  }
 
   int _parseTimeToMinutes(String time) {
     try {
       final parts = time.split(' ');
-      final hm    = parts[0].split(':');
-      int h       = int.parse(hm[0]);
-      final m     = int.parse(hm[1]);
-      final isPm  = parts[1].toUpperCase() == 'PM';
+      final hm = parts[0].split(':');
+      int h = int.parse(hm[0]);
+      final m = int.parse(hm[1]);
+      final isPm = parts[1].toUpperCase() == 'PM';
       if (isPm && h != 12) h += 12;
       if (!isPm && h == 12) h = 0;
       return h * 60 + m;
@@ -89,14 +137,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
       list = List.from(all);
     } else {
       final catMap = {
-        'Jatuh':    [HistoryCategory.jatuh, HistoryCategory.hambatanBelakang],
-        'Warning':  [HistoryCategory.aktivitas, HistoryCategory.hambatanDepan],
+        'Jatuh': [HistoryCategory.jatuh, HistoryCategory.hambatanBelakang],
+        'Warning': [HistoryCategory.aktivitas, HistoryCategory.hambatanDepan],
         'Geofence': [HistoryCategory.geofence],
-        'Sensor':   [HistoryCategory.sensor, HistoryCategory.walker],
+        'Sensor': [HistoryCategory.sensor, HistoryCategory.walker],
       };
       list = all
-          .where((h) =>
-              (catMap[_selectedCategory] ?? []).contains(h.category))
+          .where((h) => (catMap[_selectedCategory] ?? []).contains(h.category))
           .toList();
     }
 
@@ -107,8 +154,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } else if (_sortOption == 'Normal') {
       list = list
           .where((h) =>
-              h.status == HistoryStatus.aman ||
-              h.status == HistoryStatus.info)
+              h.status == HistoryStatus.aman || h.status == HistoryStatus.info)
           .toList();
     }
 
@@ -117,8 +163,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       list.sort((a, b) {
         final cmpDate = a.date.compareTo(b.date);
         if (cmpDate != 0) return asc ? cmpDate : -cmpDate;
-        final cmpTime = _parseTimeToMinutes(a.time)
-            .compareTo(_parseTimeToMinutes(b.time));
+        final cmpTime =
+            _parseTimeToMinutes(a.time).compareTo(_parseTimeToMinutes(b.time));
         return asc ? cmpTime : -cmpTime;
       });
     }
@@ -136,6 +182,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Jika service belum siap (profile sedang loading)
+    if (_walkerId == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF0F4F8),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       body: SafeArea(
@@ -147,7 +201,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 decoration: const BoxDecoration(
                   color: Color(0xFFB8D4F0),
                   borderRadius: BorderRadius.only(
-                    topLeft:  Radius.circular(24),
+                    topLeft: Radius.circular(24),
                     topRight: Radius.circular(24),
                   ),
                 ),
@@ -183,8 +237,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       );
                     }
 
-                    final allItems    = snapshot.data ?? [];
-                    final filtered    = _applyFilter(allItems);
+                    final allItems = snapshot.data ?? [];
+                    final filtered = _applyFilter(allItems);
                     final groupedItems = _grouped(filtered);
 
                     return SingleChildScrollView(
@@ -223,27 +277,50 @@ class _HistoryScreenState extends State<HistoryScreen> {
           children: [
             CircleAvatar(
               radius: 24,
-              backgroundColor: const Color(0xFFE2E8F0),
-              child: Text('M',
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary)),
+              backgroundColor: AppColors.primary.withOpacity(0.15),
+              backgroundImage: _fotoFile != null ? FileImage(_fotoFile!) : null,
+              child: _fotoFile == null
+                  ? Text(
+                      _namaUser.isNotEmpty ? _namaUser[0].toUpperCase() : '?',
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary),
+                    )
+                  : null,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Hallo, Mila',
-                      style: TextStyle(
-                          fontSize: 12, color: AppColors.textGrey)),
-                  Text('Monitoring Lansia',
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark)),
+                  Text(
+                    'Hallo, $_namaUser',
+                    style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+                  ),
+                  Text(
+                    'Monitoring $_namaLansia',
+                    style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: _C.textDark),
+                  ),
                 ],
+              ),
+            ),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.notifications_outlined,
+                    color: Colors.white, size: 22),
+                onPressed: () =>
+                    Navigator.pushNamed(context, AppRoutes.notification),
               ),
             ),
           ],
@@ -281,12 +358,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   borderRadius: BorderRadius.circular(12)),
               offset: const Offset(0, 36),
               itemBuilder: (_) => [
-                _sortMenuItem('Terbaru',   Icons.arrow_downward_rounded),
-                _sortMenuItem('Terlama',   Icons.arrow_upward_rounded),
+                _sortMenuItem('Terbaru', Icons.arrow_downward_rounded),
+                _sortMenuItem('Terlama', Icons.arrow_upward_rounded),
                 const PopupMenuDivider(),
-                _sortMenuItem('Bahaya',    Icons.dangerous_outlined),
-                _sortMenuItem('Peringatan',Icons.warning_amber_rounded),
-                _sortMenuItem('Normal',    Icons.check_circle_outline),
+                _sortMenuItem('Bahaya', Icons.dangerous_outlined),
+                _sortMenuItem('Peringatan', Icons.warning_amber_rounded),
+                _sortMenuItem('Normal', Icons.check_circle_outline),
               ],
               child: Container(
                 padding:
@@ -297,8 +374,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 child: Row(children: [
                   Text(_sortOption,
-                      style: const TextStyle(
-                          fontSize: 11, color: _C.textMid)),
+                      style: const TextStyle(fontSize: 11, color: _C.textMid)),
                   const SizedBox(width: 4),
                   const Icon(Icons.keyboard_arrow_down_rounded,
                       size: 14, color: _C.textMid),
@@ -313,22 +389,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final isActive = _sortOption == label;
     final Color iconColor;
     switch (label) {
-      case 'Bahaya':     iconColor = _C.bahayaText; break;
-      case 'Peringatan': iconColor = _C.warnText;   break;
-      case 'Normal':     iconColor = _C.amanText;   break;
-      default:           iconColor = _C.primary;
+      case 'Bahaya':
+        iconColor = _C.bahayaText;
+        break;
+      case 'Peringatan':
+        iconColor = _C.warnText;
+        break;
+      case 'Normal':
+        iconColor = _C.amanText;
+        break;
+      default:
+        iconColor = _C.primary;
     }
     return PopupMenuItem<String>(
       value: label,
       child: Row(children: [
-        Icon(icon, size: 15,
-            color: isActive ? iconColor : _C.textMid),
+        Icon(icon, size: 15, color: isActive ? iconColor : _C.textMid),
         const SizedBox(width: 10),
         Text(label,
             style: TextStyle(
                 fontSize: 13,
-                fontWeight:
-                    isActive ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                 color: isActive ? iconColor : _C.textDark)),
         if (isActive) ...[
           const Spacer(),
@@ -344,20 +425,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
           children: _tabs.map((tab) {
             final active = _selectedCategory == tab['label'];
             return GestureDetector(
-              onTap: () => setState(
-                  () => _selectedCategory = tab['label'] as String),
+              onTap: () =>
+                  setState(() => _selectedCategory = tab['label'] as String),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: active ? _C.primary : _C.white,
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(
-                      color: active
-                          ? _C.primary
-                          : const Color(0xFFE2E8F0)),
+                      color: active ? _C.primary : const Color(0xFFE2E8F0)),
                   boxShadow: active
                       ? [
                           BoxShadow(
@@ -369,8 +448,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 child: Row(children: [
                   Icon(tab['icon'] as IconData,
-                      size: 13,
-                      color: active ? Colors.white : _C.textMid),
+                      size: 13, color: active ? Colors.white : _C.textMid),
                   const SizedBox(width: 5),
                   Text(tab['label'] as String,
                       style: TextStyle(
@@ -434,8 +512,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                        color: sd.bg,
-                        borderRadius: BorderRadius.circular(10)),
+                        color: sd.bg, borderRadius: BorderRadius.circular(10)),
                     child: Icon(item.icon, size: 20, color: sd.text),
                   ),
                   const SizedBox(width: 10),
@@ -451,16 +528,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         const SizedBox(height: 2),
                         Text(item.subtitle,
                             style: const TextStyle(
-                                fontSize: 11,
-                                color: _C.textMid,
-                                height: 1.3)),
+                                fontSize: 11, color: _C.textMid, height: 1.3)),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(item.time,
-                      style: const TextStyle(
-                          fontSize: 11, color: _C.textMid)),
+                      style: const TextStyle(fontSize: 11, color: _C.textMid)),
                 ],
               ),
               if (item.meta.isNotEmpty) ...[
@@ -470,19 +544,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   runSpacing: 4,
                   children: item.meta.entries
                       .take(3)
-                      .map((e) => RichText(
-                            text: TextSpan(
-                              style: const TextStyle(
-                                  fontSize: 11, color: _C.textMid),
-                              children: [
-                                TextSpan(text: '${e.key}  '),
-                                TextSpan(
-                                    text: e.value,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: _C.textDark)),
-                              ],
-                            ),
+                      .map((e) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${e.key}: ',
+                                style: const TextStyle(
+                                    fontSize: 11, color: _C.textMid),
+                              ),
+                              Text(
+                                e.value,
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _C.textDark),
+                              ),
+                            ],
                           ))
                       .toList(),
                 ),
@@ -491,8 +568,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: sd.bg,
                     borderRadius: BorderRadius.circular(6),
@@ -538,13 +615,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
   static _StatusDesign _sdOf(HistoryStatus s) {
     switch (s) {
       case HistoryStatus.bahaya:
-        return _StatusDesign('BAHAYA',     _C.bahayaText, _C.bahayaBg, _C.bahayaBorder);
+        return _StatusDesign(
+            'BAHAYA', _C.bahayaText, _C.bahayaBg, _C.bahayaBorder);
       case HistoryStatus.peringatan:
-        return _StatusDesign('PERINGATAN', _C.warnText,   _C.warnBg,   _C.warnBorder);
+        return _StatusDesign(
+            'PERINGATAN', _C.warnText, _C.warnBg, _C.warnBorder);
       case HistoryStatus.aman:
-        return _StatusDesign('NORMAL',     _C.amanText,   _C.amanBg,   _C.amanBorder);
+        return _StatusDesign('NORMAL', _C.amanText, _C.amanBg, _C.amanBorder);
       case HistoryStatus.info:
-        return _StatusDesign('INFO',       _C.infoText,   _C.infoBg,   _C.infoBorder);
+        return _StatusDesign('INFO', _C.infoText, _C.infoBg, _C.infoBorder);
     }
   }
 }
@@ -572,7 +651,7 @@ class _DetailSheet extends StatelessWidget {
         decoration: const BoxDecoration(
           color: Color(0xFFF8FAFC),
           borderRadius: BorderRadius.vertical(
-            top:    Radius.circular(24),
+            top: Radius.circular(24),
             bottom: Radius.circular(22),
           ),
         ),
@@ -669,8 +748,8 @@ class _DetailSheet extends StatelessWidget {
                           color: sd.text)),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
                         color: sd.text,
                         borderRadius: BorderRadius.circular(16)),
@@ -683,8 +762,7 @@ class _DetailSheet extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text('${item.date}  ·  ${item.time}',
                       style: TextStyle(
-                          fontSize: 11,
-                          color: sd.text.withOpacity(0.7))),
+                          fontSize: 11, color: sd.text.withOpacity(0.7))),
                 ],
               ),
             ),
@@ -709,9 +787,7 @@ class _DetailSheet extends StatelessWidget {
               child: RichText(
                 text: const TextSpan(
                   style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF92400E),
-                      height: 1.5),
+                      fontSize: 12, color: Color(0xFF92400E), height: 1.5),
                   children: [
                     TextSpan(
                         text: 'Sensor belakang ',
@@ -736,48 +812,45 @@ class _DetailSheet extends StatelessWidget {
         children: [
           _kvRow('Jenis Kejadian', e.jenisKejadian),
           if (e.skorAnomali != null)
-            _kvRow('Skor Anomali',
-                e.skorAnomali!.toStringAsFixed(2),
+            _kvRow('Skor Anomali', e.skorAnomali!.toStringAsFixed(2),
                 highlight: true),
           _kvRow('Status Deteksi Lansia', e.statusDeteksiLansia,
               highlight: e.statusDeteksiLansia.contains('Tidak')),
-          _kvRow('Jarak Terukur',   e.jarakTerukur),
-          _kvRow('Waktu Kejadian',  '${item.date}  ${item.time}'),
-          _kvRow('Sensor',          e.sensor),
-          _kvRow('Status Bahaya',   e.statusBahaya, highlight: true),
+          _kvRow('Jarak Terukur', e.jarakTerukur),
+          _kvRow('Waktu Kejadian', '${item.date}  ${item.time}'),
+          _kvRow('Sensor', e.sensor),
+          _kvRow('Status Bahaya', e.statusBahaya, highlight: true),
         ],
       ),
     );
   }
 
   Widget _hcsrSection() {
-    final e          = item.extra;
-    final jarak      = e.hcsrJarak!;
-    final threshold  = e.hcsrThreshold ?? 60.0;
-    final isBelakang =
-        item.category == HistoryCategory.hambatanBelakang;
+    final e = item.extra;
+    final jarak = e.hcsrJarak!;
+    final threshold = e.hcsrThreshold ?? 60.0;
+    final isBelakang = item.category == HistoryCategory.hambatanBelakang;
 
     final Color statusColor = isBelakang
         ? (jarak > threshold ? _C.bahayaText : _C.amanText)
-        : (jarak < threshold ? _C.warnText   : _C.amanText);
+        : (jarak < threshold ? _C.warnText : _C.amanText);
 
     final String statusText = e.hcsrStatus ??
         (isBelakang
             ? (jarak > threshold ? 'Tidak Terdeteksi' : 'Terdeteksi')
-            : (jarak < threshold ? 'Ada Hambatan'     : 'Aman'));
+            : (jarak < threshold ? 'Ada Hambatan' : 'Aman'));
 
-    final String sensorName =
-        isBelakang ? 'HC-SR04 Belakang' : 'HC-SR04 Depan';
+    final String sensorName = isBelakang ? 'HC-SR04 Belakang' : 'HC-SR04 Depan';
 
     return _card(
       title: 'Beat Sonar Pelacak ($sensorName)',
       child: Column(
         children: [
           Row(children: [
-            _sonarCol('Jarak Terukur',
-                '${jarak.toStringAsFixed(0)} cm', _C.textDark),
-            _sonarCol('Batas Aman',
-                '≤ ${threshold.toStringAsFixed(0)} cm', _C.warnText),
+            _sonarCol(
+                'Jarak Terukur', '${jarak.toStringAsFixed(0)} cm', _C.textDark),
+            _sonarCol('Batas Aman', '≤ ${threshold.toStringAsFixed(0)} cm',
+                _C.warnText),
             _sonarCol('Status', statusText, statusColor),
           ]),
           if (isBelakang) ...[
@@ -793,9 +866,7 @@ class _DetailSheet extends StatelessWidget {
                 children: [
                   Icon(Icons.info_outline_rounded,
                       size: 14,
-                      color: jarak > threshold
-                          ? _C.bahayaText
-                          : _C.amanText),
+                      color: jarak > threshold ? _C.bahayaText : _C.amanText),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -805,9 +876,7 @@ class _DetailSheet extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.4,
-                        color: jarak > threshold
-                            ? _C.bahayaText
-                            : _C.amanText,
+                        color: jarak > threshold ? _C.bahayaText : _C.amanText,
                       ),
                     ),
                   ),
@@ -824,20 +893,16 @@ class _DetailSheet extends StatelessWidget {
         child: Column(children: [
           Text(value,
               style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: color)),
+                  fontSize: 16, fontWeight: FontWeight.bold, color: color)),
           const SizedBox(height: 2),
           Text(label,
-              style: const TextStyle(
-                  fontSize: 10, color: _C.textMid),
+              style: const TextStyle(fontSize: 10, color: _C.textMid),
               textAlign: TextAlign.center),
         ]),
       );
 
   Widget _distanceChart() {
-    final isBelakang =
-        item.category == HistoryCategory.hambatanBelakang;
+    final isBelakang = item.category == HistoryCategory.hambatanBelakang;
     return _card(
       title: 'Jarak Sensor (Belakang & Depan)',
       child: SizedBox(
@@ -887,8 +952,7 @@ class _DetailSheet extends StatelessWidget {
             decoration: BoxDecoration(
                 color: c, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 5),
-        Text(label,
-            style: const TextStyle(fontSize: 11, color: _C.textMid)),
+        Text(label, style: const TextStyle(fontSize: 11, color: _C.textMid)),
       ]);
 
   Widget _nilaiTerukur() {
@@ -915,8 +979,7 @@ class _DetailSheet extends StatelessWidget {
                                         color: _C.textDark)),
                                 Text(e.key,
                                     style: const TextStyle(
-                                        fontSize: 10,
-                                        color: _C.textMid)),
+                                        fontSize: 10, color: _C.textMid)),
                               ]),
                             ))
                         .toList(),
@@ -932,10 +995,10 @@ class _DetailSheet extends StatelessWidget {
     return _card(
       title: 'Ringkasan Sensor Terkait',
       child: Column(children: [
-        _sensorRow('HC-SR04 Depan',    r.hcsr04Depan,    r.statusDepan),
+        _sensorRow('HC-SR04 Depan', r.hcsr04Depan, r.statusDepan),
         _sensorRow('HC-SR04 Belakang', r.hcsr04Belakang, r.statusBelakang),
-        _sensorRow('IMU (MPU6050)',    r.mpu6050,        r.statusMpu),
-        _sensorRow('Lokasi GPS',       r.gpsJarak,       r.statusGps),
+        _sensorRow('IMU (MPU6050)', r.mpu6050, r.statusMpu),
+        _sensorRow('Lokasi GPS', r.gpsJarak, r.statusGps),
       ]),
     );
   }
@@ -951,33 +1014,27 @@ class _DetailSheet extends StatelessWidget {
       child: Row(children: [
         Expanded(
             child: Text(name,
-                style: const TextStyle(
-                    fontSize: 12, color: _C.textMid))),
+                style: const TextStyle(fontSize: 12, color: _C.textMid))),
         Text(value,
             style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: _C.textDark)),
+                fontSize: 12, fontWeight: FontWeight.w600, color: _C.textDark)),
         const SizedBox(width: 10),
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: c.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(status,
               style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: c)),
+                  fontSize: 10, fontWeight: FontWeight.bold, color: c)),
         ),
       ]),
     );
   }
 
   Widget _lokasiSection(BuildContext context) {
-    final e     = item.extra;
+    final e = item.extra;
     final coord = () {
       try {
         final parts = (e.lokasiKoordinat ?? '-7.9711,112.6328').split(',');
@@ -992,10 +1049,18 @@ class _DetailSheet extends StatelessWidget {
 
     final Color markerColor;
     switch (item.status) {
-      case HistoryStatus.bahaya:    markerColor = _C.bahayaText; break;
-      case HistoryStatus.peringatan: markerColor = _C.warnText;  break;
-      case HistoryStatus.aman:      markerColor = _C.amanText;   break;
-      case HistoryStatus.info:      markerColor = _C.infoText;   break;
+      case HistoryStatus.bahaya:
+        markerColor = _C.bahayaText;
+        break;
+      case HistoryStatus.peringatan:
+        markerColor = _C.warnText;
+        break;
+      case HistoryStatus.aman:
+        markerColor = _C.amanText;
+        break;
+      case HistoryStatus.info:
+        markerColor = _C.infoText;
+        break;
     }
 
     return _card(
@@ -1051,15 +1116,13 @@ class _DetailSheet extends StatelessWidget {
             runSpacing: 4,
             children: [
               Text('Lat: ${coord.latitude.toStringAsFixed(4)}',
-                  style: const TextStyle(
-                      fontSize: 11, color: _C.textMid)),
+                  style: const TextStyle(fontSize: 11, color: _C.textMid)),
               Text('Lng: ${coord.longitude.toStringAsFixed(4)}',
-                  style: const TextStyle(
-                      fontSize: 11, color: _C.textMid)),
+                  style: const TextStyle(fontSize: 11, color: _C.textMid)),
             ],
           ),
           const SizedBox(height: 6),
-          _kvRow('Lokasi',          e.lokasiNama ?? '-'),
+          _kvRow('Lokasi', e.lokasiNama ?? '-'),
           _kvRow('Status Geofence', e.kondisiGeofence),
           if (e.lokasiJarakPusat != null)
             _kvRow('Jarak dari Pusat', e.lokasiJarakPusat!),
@@ -1067,22 +1130,18 @@ class _DetailSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.location),
-              icon: Icon(Icons.map_outlined,
-                  size: 16, color: _C.primary),
-              label: Text('Lihat di Google Maps',
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.location),
+              icon: const Icon(Icons.map_outlined, size: 16, color: _C.primary),
+              label: const Text('Lihat di Google Maps',
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: _C.primary)),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(
-                    color: _C.primary.withOpacity(0.9)),
+                side: BorderSide(color: _C.primary.withOpacity(0.9)),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
-                padding:
-                    const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 backgroundColor: Colors.transparent,
               ),
             ),
@@ -1100,27 +1159,27 @@ class _DetailSheet extends StatelessWidget {
       child: Row(children: [
         Expanded(
           child: _systemStatusCard(
-            title:    'GSM Network',
-            value:    ss.gsmConnected ? 'Aktif' : 'Nonaktif',
-            icon:     Icons.signal_cellular_alt_rounded,
+            title: 'GSM Network',
+            value: ss.gsmConnected ? 'Aktif' : 'Nonaktif',
+            icon: Icons.signal_cellular_alt_rounded,
             isActive: ss.gsmConnected,
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: _systemStatusCard(
-            title:    'GPS',
-            value:    ss.gpsConnected ? 'Aktif' : 'Nonaktif',
-            icon:     Icons.gps_fixed_rounded,
+            title: 'GPS',
+            value: ss.gpsConnected ? 'Aktif' : 'Nonaktif',
+            icon: Icons.gps_fixed_rounded,
             isActive: ss.gpsConnected,
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: _systemStatusCard(
-            title:    'IMU Sensor',
-            value:    ss.imuNormal ? 'Normal' : 'Anomali',
-            icon:     Icons.sensors_rounded,
+            title: 'IMU Sensor',
+            value: ss.imuNormal ? 'Normal' : 'Anomali',
+            icon: Icons.sensors_rounded,
             isActive: ss.imuNormal,
           ),
         ),
@@ -1129,10 +1188,10 @@ class _DetailSheet extends StatelessWidget {
   }
 
   Widget _systemStatusCard({
-    required String   title,
-    required String   value,
+    required String title,
+    required String value,
     required IconData icon,
-    required bool     isActive,
+    required bool isActive,
   }) {
     final Color color = isActive ? _C.amanText : _C.bahayaText;
     return Container(
@@ -1149,15 +1208,11 @@ class _DetailSheet extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: color)),
+                fontSize: 11, fontWeight: FontWeight.w700, color: color)),
         const SizedBox(height: 2),
         Text(value,
             style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: _C.textMid)),
+                fontSize: 10, fontWeight: FontWeight.w600, color: _C.textMid)),
       ]),
     );
   }
@@ -1175,8 +1230,7 @@ class _DetailSheet extends StatelessWidget {
                       Expanded(
                           child: Text(t,
                               style: const TextStyle(
-                                  fontSize: 13,
-                                  color: _C.textDark))),
+                                  fontSize: 13, color: _C.textDark))),
                     ]),
                   ))
               .toList(),
@@ -1192,23 +1246,20 @@ class _DetailSheet extends StatelessWidget {
             backgroundColor: _C.primary,
             foregroundColor: Colors.white,
             elevation: 0,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
           child: const Text('Kembali ke History',
-              style: TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w600)),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
         ),
       );
 
-  Widget _kvRow(String k, String v, {bool highlight = false}) =>
-      Padding(
+  Widget _kvRow(String k, String v, {bool highlight = false}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(children: [
           Expanded(
               child: Text(k,
-                  style: const TextStyle(
-                      fontSize: 13, color: _C.textMid))),
+                  style: const TextStyle(fontSize: 13, color: _C.textMid))),
           Text(v,
               style: TextStyle(
                   fontSize: 13,
@@ -1289,29 +1340,24 @@ class _DistanceChartPainter extends CustomPainter {
 
     for (int i = 0; i <= 4; i++) {
       final y = padT + h * i / 4;
-      canvas.drawLine(
-          Offset(padL, y), Offset(padL + w, y), gridPaint);
+      canvas.drawLine(Offset(padL, y), Offset(padL + w, y), gridPaint);
       final val = maxVal - (maxVal - minVal) * i / 4;
       tp.text = TextSpan(
           text: '${val.toStringAsFixed(0)} cm',
-          style: const TextStyle(
-              fontSize: 8, color: Color(0xFFCBD5E1)));
+          style: const TextStyle(fontSize: 8, color: Color(0xFFCBD5E1)));
       tp.layout();
       tp.paint(canvas, Offset(0, y - 5));
     }
 
-    final ty =
-        padT + h * (1 - (threshold - minVal) / (maxVal - minVal));
-    canvas.drawLine(
-        Offset(padL, ty), Offset(padL + w, ty), threshPaint);
+    final ty = padT + h * (1 - (threshold - minVal) / (maxVal - minVal));
+    canvas.drawLine(Offset(padL, ty), Offset(padL + w, ty), threshPaint);
 
     if (data.length < 2) {
-      // Hanya 1-2 titik (belakang & depan) — tampilkan sebagai bar
       final barW = w / (data.length * 2);
       for (int i = 0; i < data.length; i++) {
-        final x    = padL + (i * 2 + 0.5) * barW;
-        final yTop = padT + h * (1 - (data[i].distance - minVal) /
-            (maxVal - minVal));
+        final x = padL + (i * 2 + 0.5) * barW;
+        final yTop =
+            padT + h * (1 - (data[i].distance - minVal) / (maxVal - minVal));
         final barPaint = Paint()
           ..color = lineColor.withOpacity(0.7)
           ..style = PaintingStyle.fill;
@@ -1322,13 +1368,10 @@ class _DistanceChartPainter extends CustomPainter {
             barPaint);
         tp.text = TextSpan(
             text: data[i].label,
-            style: const TextStyle(
-                fontSize: 8, color: Color(0xFFCBD5E1)));
+            style: const TextStyle(fontSize: 8, color: Color(0xFFCBD5E1)));
         tp.layout();
-        tp.paint(
-            canvas,
-            Offset(x + barW / 2 - tp.width / 2,
-                size.height - padB + 4));
+        tp.paint(canvas,
+            Offset(x + barW / 2 - tp.width / 2, size.height - padB + 4));
       }
       return;
     }
@@ -1337,13 +1380,10 @@ class _DistanceChartPainter extends CustomPainter {
     for (int i = 0; i < data.length; i++) {
       tp.text = TextSpan(
           text: data[i].label,
-          style: const TextStyle(
-              fontSize: 8, color: Color(0xFFCBD5E1)));
+          style: const TextStyle(fontSize: 8, color: Color(0xFFCBD5E1)));
       tp.layout();
-      tp.paint(
-          canvas,
-          Offset(padL + stepX * i - tp.width / 2,
-              size.height - padB + 4));
+      tp.paint(canvas,
+          Offset(padL + stepX * i - tp.width / 2, size.height - padB + 4));
     }
 
     double yFor(double val) =>
@@ -1353,10 +1393,11 @@ class _DistanceChartPainter extends CustomPainter {
     for (int i = 0; i < data.length; i++) {
       final x = padL + stepX * i;
       final y = yFor(data[i].distance);
-      if (i == 0)
+      if (i == 0) {
         fillPath.moveTo(x, y);
-      else
+      } else {
         fillPath.lineTo(x, y);
+      }
     }
     fillPath.lineTo(padL + stepX * (data.length - 1), padT + h);
     fillPath.lineTo(padL, padT + h);
@@ -1377,10 +1418,11 @@ class _DistanceChartPainter extends CustomPainter {
     for (int i = 0; i < data.length; i++) {
       final x = padL + stepX * i;
       final y = yFor(data[i].distance);
-      if (i == 0)
+      if (i == 0) {
         linePath.moveTo(x, y);
-      else
+      } else {
         linePath.lineTo(x, y);
+      }
     }
     canvas.drawPath(linePath, linePaint);
 
@@ -1389,9 +1431,7 @@ class _DistanceChartPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     for (int i = 0; i < data.length; i++) {
       canvas.drawCircle(
-          Offset(padL + stepX * i, yFor(data[i].distance)),
-          3.5,
-          dotPaint);
+          Offset(padL + stepX * i, yFor(data[i].distance)), 3.5, dotPaint);
     }
   }
 
@@ -1410,9 +1450,9 @@ class _SensorChartPainter extends CustomPainter {
     double minVal = double.infinity, maxVal = double.negativeInfinity;
     for (final d in data) {
       if (d.accel < minVal) minVal = d.accel;
-      if (d.gyro  < minVal) minVal = d.gyro;
+      if (d.gyro < minVal) minVal = d.gyro;
       if (d.accel > maxVal) maxVal = d.accel;
-      if (d.gyro  > maxVal) maxVal = d.gyro;
+      if (d.gyro > maxVal) maxVal = d.gyro;
     }
     minVal = (minVal - 0.5).floorToDouble();
     maxVal = (maxVal + 0.5).ceilToDouble();
@@ -1426,19 +1466,19 @@ class _SensorChartPainter extends CustomPainter {
       ..color = const Color(0xFFE2E8F0)
       ..strokeWidth = 1;
     for (int i = 0; i <= 4; i++) {
-      canvas.drawLine(
-          Offset(0, h * i / 4), Offset(w, h * i / 4), gridPaint);
+      canvas.drawLine(Offset(0, h * i / 4), Offset(w, h * i / 4), gridPaint);
     }
 
     double yFor(double val) => h - ((val - minVal) / range) * h;
 
     void drawLine(List<double> vals, Color color) {
       if (vals.length < 2) {
-        // Hanya 1 titik — gambar dot
         canvas.drawCircle(
             Offset(w / 2, yFor(vals.first)),
             5,
-            Paint()..color = color..style = PaintingStyle.fill);
+            Paint()
+              ..color = color
+              ..style = PaintingStyle.fill);
         return;
       }
       final stepX = w / (vals.length - 1);
@@ -1452,19 +1492,23 @@ class _SensorChartPainter extends CustomPainter {
       for (int i = 0; i < vals.length; i++) {
         final x = stepX * i;
         final y = yFor(vals[i]);
-        if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
       }
       canvas.drawPath(path, paint);
-      final dot = Paint()..color = color..style = PaintingStyle.fill;
+      final dot = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill;
       for (int i = 0; i < vals.length; i++) {
         canvas.drawCircle(Offset(stepX * i, yFor(vals[i])), 3, dot);
       }
     }
 
-    drawLine(data.map((d) => d.accel).toList(),
-        const Color(0xFF3B82F6));
-    drawLine(data.map((d) => d.gyro).toList(),
-        const Color(0xFF10B981));
+    drawLine(data.map((d) => d.accel).toList(), const Color(0xFF3B82F6));
+    drawLine(data.map((d) => d.gyro).toList(), const Color(0xFF10B981));
   }
 
   @override
@@ -1474,8 +1518,8 @@ class _SensorChartPainter extends CustomPainter {
 // ── Status Design ─────────────────────────────────────────────
 class _StatusDesign {
   final String label;
-  final Color  text;
-  final Color  bg;
-  final Color  border;
+  final Color text;
+  final Color bg;
+  final Color border;
   const _StatusDesign(this.label, this.text, this.bg, this.border);
 }

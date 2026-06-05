@@ -23,6 +23,8 @@ Future<void> main() async {
 
   // Inisialisasi SQLite
   await DatabaseHelper.instance.database;
+  // Buat data settings default jika belum ada
+  await DatabaseHelper.instance.initializeSettings();
   // await DatabaseHelper.instance.logout();
   await DatabaseHelper.instance.checkTables();
 

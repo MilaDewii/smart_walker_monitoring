@@ -1,431 +1,438 @@
 // lib/models/history_model.dart
-// ============================================================
-// MODEL HISTORY — disesuaikan persis dengan struktur RTD
-//
-// Struktur RTD yang sudah dikonfirmasi:
-//   sensorData     : flat object {accel_x,y,z, gyro_x,y,z}
-//   SensorData     : sama persis (capital S, alias)
-//   distanceData   : flat object {hcsr04_back, hcsr04_front}
-//   statusSistem   : {gpsConnected, gsmConnected, imuNormal}
-//   tindakanSistem : map {0: "...", 1: "..."}
-//   lokasiJarakPusat : number (double)
-//   category / type : keduanya diterima
-//   subtitle / subtittle : keduanya diterima
-//   timestamp      : "2026-06-02 21:25:00"
-//   Tidak ada field battery
-// ============================================================
 
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 
-// ── Enum kategori ─────────────────────────────────────────────
-enum HistoryCategory {
-  jatuh,
-  hambatanDepan,
-  hambatanBelakang,
-  geofence,
-  sensor,
-  walker,
-  aktivitas,
-}
-
-// ── Enum status ───────────────────────────────────────────────
 enum HistoryStatus { bahaya, peringatan, aman, info }
 
-// ── SensorDataPoint — dihitung dari flat IMU object ───────────
-// RTD: sensorData { accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z }
-// Chart butuh resultante: accel = sqrt(x²+y²+z²), gyro = sqrt(x²+y²+z²)
+enum HistoryCategory {
+  jatuh,
+  geofence,
+  sensor,
+  aktivitas,
+  hambatanDepan,
+  hambatanBelakang,
+  walker,
+}
+
 class SensorDataPoint {
   final double accel;
   final double gyro;
   const SensorDataPoint({required this.accel, required this.gyro});
-
-  /// Parse dari flat IMU object RTD
-  factory SensorDataPoint.fromFlatMap(Map<String, dynamic> m) {
-    final ax = (m['accel_x'] as num?)?.toDouble() ?? 0.0;
-    final ay = (m['accel_y'] as num?)?.toDouble() ?? 0.0;
-    final az = (m['accel_z'] as num?)?.toDouble() ?? 0.0;
-    final gx = (m['gyro_x']  as num?)?.toDouble() ?? 0.0;
-    final gy = (m['gyro_y']  as num?)?.toDouble() ?? 0.0;
-    final gz = (m['gyro_z']  as num?)?.toDouble() ?? 0.0;
-    return SensorDataPoint(
-      accel: math.sqrt(ax * ax + ay * ay + az * az),
-      gyro:  math.sqrt(gx * gx + gy * gy + gz * gz),
-    );
-  }
 }
 
-// ── DistanceDataPoint — dari flat distanceData object ─────────
-// RTD: distanceData { hcsr04_back: 18, hcsr04_front: 45 }
-// Chart butuh list titik, kita buat 2 titik dari 2 sensor
 class DistanceDataPoint {
   final String label;
   final double distance;
   const DistanceDataPoint({required this.label, required this.distance});
-
-  static List<DistanceDataPoint> fromFlatMap(Map<String, dynamic> m) {
-    final back  = (m['hcsr04_back']  as num?)?.toDouble();
-    final front = (m['hcsr04_front'] as num?)?.toDouble();
-    final result = <DistanceDataPoint>[];
-    if (back  != null) result.add(DistanceDataPoint(label: 'Belakang', distance: back));
-    if (front != null) result.add(DistanceDataPoint(label: 'Depan',    distance: front));
-    return result;
-  }
 }
 
-// ── RingkasanSensor — dibangun dari node sensors + distanceData ─
 class RingkasanSensor {
   final String hcsr04Depan;
-  final String statusDepan;
   final String hcsr04Belakang;
-  final String statusBelakang;
   final String mpu6050;
-  final String statusMpu;
   final String gpsJarak;
+  final String statusDepan;
+  final String statusBelakang;
+  final String statusMpu;
   final String statusGps;
 
   const RingkasanSensor({
     required this.hcsr04Depan,
-    required this.statusDepan,
     required this.hcsr04Belakang,
-    required this.statusBelakang,
     required this.mpu6050,
-    required this.statusMpu,
     required this.gpsJarak,
+    required this.statusDepan,
+    required this.statusBelakang,
+    required this.statusMpu,
     required this.statusGps,
   });
-
-  /// Dibangun dari data yang tersedia di node history
-  factory RingkasanSensor.fromHistoryMap(Map<String, dynamic> m) {
-    // distanceData flat
-    final rawDist = m['distanceData'];
-    String backVal = '-', frontVal = '-';
-    if (rawDist is Map) {
-      final back  = rawDist['hcsr04_back'];
-      final front = rawDist['hcsr04_front'];
-      if (back  != null) backVal  = '$back cm';
-      if (front != null) frontVal = '$front cm';
-    }
-
-    // hcsrStatus
-    final hcsrStatus = m['hcsrStatus'] as String? ?? '-';
-    final hcsrJarak  = (m['hcsrJarak'] as num?)?.toDouble();
-    final threshold  = (m['hcsrThreshold'] as num?)?.toDouble() ?? 60.0;
-
-    // imuNormal dari statusSistem
-    final rawSS    = m['statusSistem'];
-    bool imuNormal = true;
-    if (rawSS is Map) {
-      imuNormal = rawSS['imuNormal'] as bool? ?? true;
-    }
-
-    // lokasi
-    final coord = m['lokasiKoordinat'] as String? ?? '-';
-
-    return RingkasanSensor(
-      hcsr04Depan:    frontVal,
-      statusDepan:    frontVal == '-' ? '-' : 'Terukur',
-      hcsr04Belakang: backVal,
-      statusBelakang: hcsrStatus,
-      mpu6050:        imuNormal ? 'Normal' : 'Anomali',
-      statusMpu:      imuNormal ? 'Aman'   : 'Anomali',
-      gpsJarak:       coord,
-      statusGps:      coord == '-' ? 'Tidak Aktif' : 'Aktif',
-    );
-  }
 }
 
-// ── StatusSistem — tanpa battery, sesuai RTD ─────────────────
-// RTD: { gpsConnected, gsmConnected, imuNormal }
 class StatusSistem {
-  final bool gpsConnected;
   final bool gsmConnected;
+  final bool gpsConnected;
   final bool imuNormal;
 
   const StatusSistem({
-    required this.gpsConnected,
     required this.gsmConnected,
+    required this.gpsConnected,
     required this.imuNormal,
   });
-
-  factory StatusSistem.fromMap(Map<String, dynamic> m) => StatusSistem(
-        gpsConnected: m['gpsConnected'] as bool? ?? false,
-        gsmConnected: m['gsmConnected'] as bool? ?? false,
-        imuNormal:    m['imuNormal']    as bool? ?? true,
-      );
 }
 
-// ── HistoryExtra ──────────────────────────────────────────────
 class HistoryExtra {
-  final String           jenisKejadian;
-  final double?          skorAnomali;
-  final String           statusDeteksiLansia;
-  final String           jarakTerukur;
-  final String           sensor;
-  final String           statusBahaya;
-
-  final double?          hcsrJarak;
-  final double?          hcsrThreshold;
-  final String?          hcsrStatus;
-
+  final String jenisKejadian;
+  final double? skorAnomali;
+  final String statusDeteksiLansia;
+  final String jarakTerukur;
+  final String sensor;
+  final String statusBahaya;
+  final double? hcsrJarak;
+  final double? hcsrThreshold;
+  final String? hcsrStatus;
   final List<DistanceDataPoint> distanceData;
-  final List<SensorDataPoint>   sensorData;
-  final Map<String, String>     dataTerukur;
-
-  final RingkasanSensor?        ringkasanSensor;
-
-  final String?          lokasiNama;
-  final String?          lokasiKoordinat;
-  final String           kondisiGeofence;
-  final String?          lokasiJarakPusat;
-
-  final StatusSistem?           statusSistem;
-  final List<String>            tindakanSistem;
+  final List<SensorDataPoint> sensorData;
+  final Map<String, String> dataTerukur;
+  final RingkasanSensor? ringkasanSensor;
+  final String? lokasiNama;
+  final String? lokasiKoordinat;
+  final String? lokasiJarakPusat;
+  final String kondisiGeofence;
+  final StatusSistem? statusSistem;
+  final List<String> tindakanSistem;
 
   const HistoryExtra({
-    required this.jenisKejadian,
+    this.jenisKejadian = '-',
     this.skorAnomali,
-    required this.statusDeteksiLansia,
-    required this.jarakTerukur,
-    required this.sensor,
-    required this.statusBahaya,
+    this.statusDeteksiLansia = '-',
+    this.jarakTerukur = '-',
+    this.sensor = '-',
+    this.statusBahaya = '-',
     this.hcsrJarak,
     this.hcsrThreshold,
     this.hcsrStatus,
     this.distanceData = const [],
-    this.sensorData   = const [],
-    this.dataTerukur  = const {},
+    this.sensorData = const [],
+    this.dataTerukur = const {},
     this.ringkasanSensor,
     this.lokasiNama,
     this.lokasiKoordinat,
-    this.kondisiGeofence = '-',
     this.lokasiJarakPusat,
+    this.kondisiGeofence = '-',
     this.statusSistem,
     this.tindakanSistem = const [],
   });
-
-  factory HistoryExtra.fromMap(Map<String, dynamic> m) {
-    // ── distanceData (flat: {hcsr04_back, hcsr04_front}) ────
-    final rawDist = m['distanceData'];
-    List<DistanceDataPoint> distanceData = [];
-    if (rawDist is Map) {
-      distanceData = DistanceDataPoint.fromFlatMap(
-          Map<String, dynamic>.from(rawDist));
-    }
-
-    // ── sensorData (flat IMU object, key bisa 'sensorData' atau 'SensorData') ──
-    final rawSensor = m['sensorData'] ?? m['SensorData'];
-    List<SensorDataPoint> sensorData = [];
-    if (rawSensor is Map) {
-      sensorData = [SensorDataPoint.fromFlatMap(
-          Map<String, dynamic>.from(rawSensor))];
-    }
-
-    // ── dataTerukur — dibangun dari sensorData flat ──────────
-    final dataTerukur = <String, String>{};
-    if (rawSensor is Map) {
-      final ax = rawSensor['accel_x'];
-      final ay = rawSensor['accel_y'];
-      final az = rawSensor['accel_z'];
-      final gx = rawSensor['gyro_x'];
-      final gy = rawSensor['gyro_y'];
-      final gz = rawSensor['gyro_z'];
-      if (ax != null) dataTerukur['Accel X'] = '$ax g';
-      if (ay != null) dataTerukur['Accel Y'] = '$ay g';
-      if (az != null) dataTerukur['Accel Z'] = '$az m/s²';
-      if (gx != null) dataTerukur['Gyro X']  = '$gx °/s';
-      if (gy != null) dataTerukur['Gyro Y']  = '$gy °/s';
-      if (gz != null) dataTerukur['Gyro Z']  = '$gz °/s';
-    }
-
-    // ── tindakanSistem (map {0: "...", 1: "..."} atau list) ──
-    final rawTindakan = m['tindakanSistem'];
-    final tindakanSistem = <String>[];
-    if (rawTindakan is Map) {
-      final sorted = rawTindakan.entries.toList()
-        ..sort((a, b) {
-          final ai = int.tryParse(a.key.toString()) ?? 0;
-          final bi = int.tryParse(b.key.toString()) ?? 0;
-          return ai.compareTo(bi);
-        });
-      tindakanSistem.addAll(sorted.map((e) => e.value.toString()));
-    } else if (rawTindakan is List) {
-      tindakanSistem.addAll(rawTindakan.map((e) => e.toString()));
-    }
-
-    // ── statusSistem ─────────────────────────────────────────
-    StatusSistem? statusSistem;
-    final rawSS = m['statusSistem'];
-    if (rawSS is Map) {
-      statusSistem = StatusSistem.fromMap(Map<String, dynamic>.from(rawSS));
-    }
-
-    // ── ringkasanSensor — dibangun otomatis dari data ada ────
-    final ringkasan = RingkasanSensor.fromHistoryMap(m);
-
-    // ── lokasiJarakPusat — bisa number atau string di RTD ────
-    String? lokasiJarakPusat;
-    final rawJarak = m['lokasiJarakPusat'];
-    if (rawJarak != null) {
-      lokasiJarakPusat = rawJarak is num
-          ? '${rawJarak.toStringAsFixed(1)} m dari pusat'
-          : rawJarak.toString();
-    }
-
-    return HistoryExtra(
-      jenisKejadian:       m['jenisKejadian']       as String? ?? '-',
-      skorAnomali:         (m['skorAnomali']         as num?)?.toDouble(),
-      statusDeteksiLansia: m['statusDeteksiLansia']  as String? ?? '-',
-      jarakTerukur:        m['jarakTerukur']         as String? ?? '-',
-      sensor:              m['sensor']               as String? ?? '-',
-      statusBahaya:        m['statusBahaya']         as String? ?? '-',
-      hcsrJarak:           (m['hcsrJarak']           as num?)?.toDouble(),
-      hcsrThreshold:       (m['hcsrThreshold']       as num?)?.toDouble(),
-      hcsrStatus:          m['hcsrStatus']           as String?,
-      distanceData:        distanceData,
-      sensorData:          sensorData,
-      dataTerukur:         dataTerukur,
-      ringkasanSensor:     ringkasan,
-      lokasiNama:          m['lokasiNama']           as String?,
-      lokasiKoordinat:     m['lokasiKoordinat']      as String?,
-      kondisiGeofence:     m['kondisiGeofence']      as String? ?? '-',
-      lokasiJarakPusat:    lokasiJarakPusat,
-      statusSistem:        statusSistem,
-      tindakanSistem:      tindakanSistem,
-    );
-  }
 }
 
-// ── HistoryItem ───────────────────────────────────────────────
 class HistoryItem {
-  final String          id;
+  final String id;
+  final String title;
+  final String subtitle;
+  final String date;
+  final String time;
+  final HistoryStatus status;
   final HistoryCategory category;
-  final HistoryStatus   status;
-  final String          title;
-  final String          subtitle;
-  final String          date;
-  final String          time;
-  final IconData        icon;
+  final IconData icon;
   final Map<String, String> meta;
-  final HistoryExtra    extra;
+  final HistoryExtra extra;
 
   const HistoryItem({
     required this.id,
-    required this.category,
-    required this.status,
     required this.title,
     required this.subtitle,
     required this.date,
     required this.time,
+    required this.status,
+    required this.category,
     required this.icon,
     this.meta = const {},
-    required this.extra,
+    this.extra = const HistoryExtra(),
   });
 
-  factory HistoryItem.fromMap(String id, Map<String, dynamic> m) {
-    // category — coba 'category' dulu, fallback ke 'type'
-    final catRaw = (m['category'] ?? m['type']) as String? ?? 'aktivitas';
-    final category = _parseCategory(catRaw);
-    final status   = _parseStatus(m['status'] as String? ?? 'info');
+  factory HistoryItem.fromRtd(String id, Map<dynamic, dynamic> raw) {
+    final ts = raw['timestamp']?.toString() ?? '';
+    final datePart = _parseDate(ts);
+    final timePart = _parseTime(ts);
 
-    // subtitle — handle typo 'subtittle'
-    final subtitle = (m['subtitle'] ?? m['subtittle']) as String? ?? '';
+    final statusStr = (raw['status']?.toString() ?? '').toLowerCase();
+    final status = _parseStatus(statusStr);
 
-    // timestamp — format "2026-06-02 21:25:00"
-    final ts     = m['timestamp'] as String? ?? '';
-    final parsed = _parseTimestamp(ts);
+    final catStr =
+        (raw['category'] ?? raw['type'] ?? '').toString().toLowerCase();
+    final category = _parseCategory(catStr);
+
+    final subtitle = (raw['subtitle'] ?? raw['subtittle'] ?? '').toString();
+
+    // ── distanceData — coba dari history dulu, fallback ctx ──
+    final distMap = _asMap(raw['distanceData']);
+    final distanceData = <DistanceDataPoint>[];
+
+    final backVal = distMap['hcsr04_back'] ?? raw['_ctx_hcsrBack'];
+    final frontVal = distMap['hcsr04_front'] ?? raw['_ctx_hcsrFront'];
+
+    if (backVal != null) {
+      distanceData.add(DistanceDataPoint(
+          label: 'Belakang', distance: _toDouble(backVal, 0)));
+    }
+    if (frontVal != null) {
+      distanceData.add(
+          DistanceDataPoint(label: 'Depan', distance: _toDouble(frontVal, 0)));
+    }
+
+    // ── sensorData — fallback ke ctx (mpu6050 dari parent) ──
+    final sensorMap = _asMap(raw['sensorData']);
+    final ax = _toDouble(sensorMap['accel_x'] ?? raw['_ctx_accel_x'], 0);
+    final ay = _toDouble(sensorMap['accel_y'] ?? raw['_ctx_accel_y'], 0);
+    final az = _toDouble(sensorMap['accel_z'] ?? raw['_ctx_accel_z'], 0);
+    final gx = _toDouble(sensorMap['gyro_x'] ?? raw['_ctx_gyro_x'], 0);
+    final gy = _toDouble(sensorMap['gyro_y'] ?? raw['_ctx_gyro_y'], 0);
+    final gz = _toDouble(sensorMap['gyro_z'] ?? raw['_ctx_gyro_z'], 0);
+
+    final hasSensor = sensorMap.isNotEmpty || raw['_ctx_accel_x'] != null;
+    final sensorData = hasSensor
+        ? [
+            SensorDataPoint(accel: ax, gyro: gx),
+            SensorDataPoint(accel: ay, gyro: gy),
+            SensorDataPoint(accel: az, gyro: gz),
+          ]
+        : <SensorDataPoint>[];
+
+    final dataTerukur = <String, String>{};
+    if (hasSensor) {
+      dataTerukur['Accel X'] = '${ax.toStringAsFixed(2)} g';
+      dataTerukur['Accel Y'] = '${ay.toStringAsFixed(2)} g';
+      dataTerukur['Accel Z'] = '${az.toStringAsFixed(2)} g';
+      dataTerukur['Gyro X'] = '${gx.toStringAsFixed(2)} °/s';
+      dataTerukur['Gyro Y'] = '${gy.toStringAsFixed(2)} °/s';
+      dataTerukur['Gyro Z'] = '${gz.toStringAsFixed(2)} °/s';
+    }
+
+    // ── HC-SR04 ──
+    final hcsrJarak =
+        raw['hcsrJarak'] != null ? _toDouble(raw['hcsrJarak'], 0) : null;
+    final hcsrThreshold = raw['hcsrThreshold'] != null
+        ? _toDouble(raw['hcsrThreshold'], 30)
+        : null;
+    final hcsrStatus = raw['hcsrStatus']?.toString();
+
+    // ── lokasiJarakPusat — history dulu, fallback ctx ──
+    final jarakPusatRaw = raw['lokasiJarakPusat'] ?? raw['_ctx_jarakDariPusat'];
+    final lokasiJarakPusat = jarakPusatRaw != null
+        ? (jarakPusatRaw is String && jarakPusatRaw.contains('m')
+            ? jarakPusatRaw
+            : '${_toDouble(jarakPusatRaw, 0).toStringAsFixed(1)} m')
+        : null;
+
+    // ── lokasiKoordinat — history dulu, fallback ctx ──
+    final lokasiKoordinat = raw['lokasiKoordinat']?.toString() ??
+        raw['_ctx_lokasiKoordinat']?.toString();
+
+    // ── kondisiGeofence — history dulu, fallback ctx ──
+    final kondisiGeofence = raw['kondisiGeofence']?.toString() ??
+        raw['_ctx_kondisiGeofence']?.toString() ??
+        '-';
+
+    // ── Ringkasan sensor ──
+    RingkasanSensor? ringkasan;
+    if (distanceData.isNotEmpty || hasSensor) {
+      final back =
+          backVal != null ? '${_toDouble(backVal, 0).toInt()} cm' : '-';
+      final front =
+          frontVal != null ? '${_toDouble(frontVal, 0).toInt()} cm' : '-';
+      final threshold = hcsrThreshold ?? 30.0;
+      ringkasan = RingkasanSensor(
+        hcsr04Depan: front,
+        hcsr04Belakang: back,
+        mpu6050: hasSensor ? 'Aktif' : '-',
+        gpsJarak: lokasiJarakPusat ?? '-',
+        statusDepan: frontVal != null && _toDouble(frontVal, 999) < threshold
+            ? 'Ada Hambatan'
+            : 'Aman',
+        statusBelakang: backVal != null && _toDouble(backVal, 0) > threshold
+            ? 'Tidak Terdeteksi'
+            : 'Terdeteksi',
+        statusMpu: (raw['skorAnomali'] != null &&
+                _toDouble(raw['skorAnomali'], 0) > 0.5)
+            ? 'Anomali'
+            : 'Normal',
+        statusGps: lokasiKoordinat != null ? 'Aktif' : 'Tidak Aktif',
+      );
+    }
+
+    // ── tindakanSistem ──
+    final tindakanRaw = raw['tindakanSistem'];
+    final tindakan = <String>[];
+    if (tindakanRaw is List) {
+      tindakan.addAll(tindakanRaw.map((e) => e.toString()));
+    } else if (tindakanRaw is Map) {
+      final sorted = tindakanRaw.entries.toList()
+        ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
+      tindakan.addAll(sorted.map((e) => e.value.toString()));
+    }
+
+    // ── statusSistem — dari ctx (sim808 di parent walker) ──
+    final statusSistem = StatusSistem(
+      gsmConnected: raw['_ctx_gsmConnected'] == true,
+      gpsConnected: raw['_ctx_gpsConnected'] == true,
+      imuNormal: raw['_ctx_imuNormal'] != false,
+    );
+
+    // ── meta ──
+    final meta = <String, String>{};
+    if (hcsrJarak != null) meta['Jarak'] = '${hcsrJarak.toInt()} cm';
+    if (raw['skorAnomali'] != null)
+      meta['Anomali'] = _toDouble(raw['skorAnomali'], 0).toStringAsFixed(2);
+    if (raw['lokasiNama'] != null)
+      meta['Lokasi'] = raw['lokasiNama'].toString();
+
+    final extra = HistoryExtra(
+      jenisKejadian: raw['jenisKejadian']?.toString() ?? '-',
+      skorAnomali:
+          raw['skorAnomali'] != null ? _toDouble(raw['skorAnomali'], 0) : null,
+      statusDeteksiLansia: raw['statusDeteksiLansia']?.toString() ?? '-',
+      jarakTerukur: raw['jarakTerukur']?.toString() ?? '-',
+      sensor: raw['sensor']?.toString() ?? '-',
+      statusBahaya: raw['statusBahaya']?.toString() ?? '-',
+      hcsrJarak: hcsrJarak,
+      hcsrThreshold: hcsrThreshold,
+      hcsrStatus: hcsrStatus,
+      distanceData: distanceData,
+      sensorData: sensorData,
+      dataTerukur: dataTerukur,
+      ringkasanSensor: ringkasan,
+      lokasiNama: raw['lokasiNama']?.toString(),
+      lokasiKoordinat: lokasiKoordinat,
+      lokasiJarakPusat: lokasiJarakPusat,
+      kondisiGeofence: kondisiGeofence,
+      statusSistem: statusSistem,
+      tindakanSistem: tindakan,
+    );
 
     return HistoryItem(
-      id:       id,
-      category: category,
-      status:   status,
-      title:    m['title']   as String? ?? 'Kejadian',
+      id: id,
+      title: raw['title']?.toString() ?? 'Kejadian',
       subtitle: subtitle,
-      date:     parsed.$1,
-      time:     parsed.$2,
-      icon:     _iconFor(category, status),
-      meta:     _buildMeta(m),
-      extra:    HistoryExtra.fromMap(m),
+      date: datePart,
+      time: timePart,
+      status: status,
+      category: category,
+      icon: _iconOf(category),
+      meta: meta,
+      extra: extra,
     );
   }
 
-  static HistoryCategory _parseCategory(String raw) {
-    switch (raw.toLowerCase().replaceAll(' ', '')) {
-      case 'jatuh':            return HistoryCategory.jatuh;
-      case 'hambatandepan':    return HistoryCategory.hambatanDepan;
-      case 'hambatanbelakang': return HistoryCategory.hambatanBelakang;
-      case 'geofence':         return HistoryCategory.geofence;
-      case 'sensor':           return HistoryCategory.sensor;
-      case 'walker':           return HistoryCategory.walker;
-      default:                 return HistoryCategory.aktivitas;
+  factory HistoryItem.fromCache(
+    Map<String, dynamic> data,
+  ) {
+    HistoryStatus status = HistoryStatus.info;
+
+    switch ((data['status'] ?? '').toString().toLowerCase()) {
+      case 'bahaya':
+        status = HistoryStatus.bahaya;
+        break;
+      case 'peringatan':
+        status = HistoryStatus.peringatan;
+        break;
+      case 'aman':
+        status = HistoryStatus.aman;
+        break;
     }
+
+    HistoryCategory category = HistoryCategory.sensor;
+
+    switch ((data['type'] ?? '').toString().toLowerCase()) {
+      case 'geofence':
+        category = HistoryCategory.geofence;
+        break;
+      case 'jatuh':
+        category = HistoryCategory.jatuh;
+        break;
+      case 'hambatan_depan':
+        category = HistoryCategory.hambatanDepan;
+        break;
+      case 'hambatan_belakang':
+        category = HistoryCategory.hambatanBelakang;
+        break;
+    }
+
+    final createdAt = data['created_at']?.toString() ?? '';
+
+    return HistoryItem(
+      id: data['id'].toString(),
+      title: data['title'] ?? '',
+      subtitle: data['subtitle'] ?? '',
+      date: _parseDate(createdAt),
+      time: _parseTime(createdAt),
+      status: status,
+      category: category,
+      icon: _iconOf(category),
+      meta: const {},
+      extra: const HistoryExtra(),
+    );
   }
 
-  static HistoryStatus _parseStatus(String raw) {
-    switch (raw.toLowerCase()) {
-      case 'danger':
-      case 'bahaya':     return HistoryStatus.bahaya;
-      case 'warning':
-      case 'peringatan': return HistoryStatus.peringatan;
-      case 'safe':
-      case 'aman':       return HistoryStatus.aman;
-      default:           return HistoryStatus.info;
-    }
+  static HistoryStatus _parseStatus(String s) {
+    if (s == 'danger' || s == 'bahaya') return HistoryStatus.bahaya;
+    if (s == 'warning' || s == 'peringatan') return HistoryStatus.peringatan;
+    if (s == 'info') return HistoryStatus.info;
+    return HistoryStatus.aman;
   }
 
-  static (String, String) _parseTimestamp(String ts) {
-    try {
-      final dt = DateTime.parse(ts.replaceAll(' ', 'T'));
-      const months = [
-        '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-        'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
-      ];
-      final date =
-          '${dt.day.toString().padLeft(2, '0')} ${months[dt.month]} ${dt.year}';
-      final h    = dt.hour > 12
-          ? dt.hour - 12
-          : (dt.hour == 0 ? 12 : dt.hour);
-      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-      final time =
-          '${h.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $ampm';
-      return (date, time);
-    } catch (_) {
-      return ('-', '-');
-    }
+  static HistoryCategory _parseCategory(String s) {
+    if (s.contains('jatuh')) return HistoryCategory.jatuh;
+    if (s.contains('geofence')) return HistoryCategory.geofence;
+    if (s.contains('belakang') || s == 'fall')
+      return HistoryCategory.hambatanBelakang;
+    if (s.contains('depan') || s == 'obstacle')
+      return HistoryCategory.hambatanDepan;
+    if (s.contains('aktivitas')) return HistoryCategory.aktivitas;
+    if (s.contains('walker')) return HistoryCategory.walker;
+    return HistoryCategory.sensor;
   }
 
-  static IconData _iconFor(HistoryCategory cat, HistoryStatus status) {
+  static IconData _iconOf(HistoryCategory cat) {
     switch (cat) {
       case HistoryCategory.jatuh:
         return Icons.personal_injury_rounded;
-      case HistoryCategory.hambatanBelakang:
-        return status == HistoryStatus.bahaya
-            ? Icons.personal_injury_rounded
-            : Icons.sensors_rounded;
-      case HistoryCategory.hambatanDepan:
-        return Icons.front_hand_rounded;
       case HistoryCategory.geofence:
         return Icons.location_off_rounded;
+      case HistoryCategory.hambatanBelakang:
+        return Icons.sensors_rounded;
+      case HistoryCategory.hambatanDepan:
+        return Icons.warning_amber_rounded;
+      case HistoryCategory.aktivitas:
+        return Icons.directions_walk_rounded;
+      case HistoryCategory.walker:
+        return Icons.accessibility_new_rounded;
       case HistoryCategory.sensor:
         return Icons.sensors_rounded;
-      case HistoryCategory.walker:
-        return Icons.accessible_rounded;
-      case HistoryCategory.aktivitas:
-        return Icons.check_circle_outline_rounded;
     }
   }
 
-  static Map<String, String> _buildMeta(Map<String, dynamic> m) {
-    final meta = <String, String>{};
-    final jarakTerukur = m['jarakTerukur'] as String?;
-    final sensor       = m['sensor']       as String?;
-    final statusBahaya = m['statusBahaya'] as String?;
-    if (jarakTerukur != null && jarakTerukur != '-')
-      meta['Jarak']  = jarakTerukur;
-    if (sensor != null && sensor != '-')
-      meta['Sensor'] = sensor;
-    if (statusBahaya != null && statusBahaya != '-')
-      meta['Status'] = statusBahaya;
-    return meta;
+  static Map<dynamic, dynamic> _asMap(dynamic v) =>
+      v is Map ? Map<dynamic, dynamic>.from(v) : {};
+
+  static double _toDouble(dynamic v, double fallback) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? fallback;
+    return fallback;
+  }
+
+  static String _parseDate(String ts) {
+    try {
+      final dt = DateTime.parse(ts.replaceAll(' ', 'T'));
+      const months = [
+        '',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'Mei',
+        'Jun',
+        'Jul',
+        'Ags',
+        'Sep',
+        'Okt',
+        'Nov',
+        'Des'
+      ];
+      return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month]} ${dt.year}';
+    } catch (_) {
+      return ts.isNotEmpty ? ts.split(' ').first : '-';
+    }
+  }
+
+  static String _parseTime(String ts) {
+    try {
+      final dt = DateTime.parse(ts.replaceAll(' ', 'T'));
+      final h24 = dt.hour;
+      final m = dt.minute.toString().padLeft(2, '0');
+      final h12 = h24 % 12 == 0 ? 12 : h24 % 12;
+      final ampm = h24 >= 12 ? 'PM' : 'AM';
+      return '${h12.toString().padLeft(2, '0')}:$m $ampm';
+    } catch (_) {
+      return '-';
+    }
   }
 }
