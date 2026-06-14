@@ -31,7 +31,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
     );
   }
@@ -56,7 +56,8 @@ class DatabaseHelper {
   CREATE TABLE login_session(
     user_id TEXT PRIMARY KEY,
     email TEXT,
-    is_login INTEGER
+    is_login INTEGER,
+    remember_me INTEGER
   )
   ''');
 
@@ -469,6 +470,7 @@ CREATE TABLE cache_history(
   Future<int> saveLoginSession({
     required String userId,
     required String email,
+    required int rememberMe,
     // required int isLogin,
   }) async {
     final db = await database;
@@ -479,6 +481,7 @@ CREATE TABLE cache_history(
         'user_id': userId,
         'email': email,
         'is_login': 1,
+        'remember_me': rememberMe,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -520,8 +523,11 @@ CREATE TABLE cache_history(
   Future<int> logout() async {
     final db = await database;
 
-    return await db.delete(
+    return await db.update(
       'login_session',
+      {
+        'is_login': 0,
+      },
     );
   }
 
@@ -631,5 +637,41 @@ CREATE TABLE cache_history(
     );
 
     return result.isNotEmpty;
+  }
+
+  Future<Map<String, dynamic>?> checkUserForReset(
+    String email,
+    String noHp,
+  ) async {
+    final db = await database;
+
+    final result = await db.query(
+      'users',
+      where: 'email = ? AND no_hp = ?',
+      whereArgs: [email, noHp],
+      limit: 1,
+    );
+
+    if (result.isNotEmpty) {
+      return result.first;
+    }
+
+    return null;
+  }
+
+  Future updatePassword(
+    int userId,
+    String newPassword,
+  ) async {
+    final db = await database;
+
+    return await db.update(
+      'users',
+      {
+        'password': newPassword,
+      },
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
   }
 }

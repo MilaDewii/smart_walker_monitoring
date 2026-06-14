@@ -41,6 +41,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+// =========================
+    // VALIDASI EMAIL
+    // =========================
+    final email = _emailController.text.trim();
+
+    final emailRegex = RegExp(
+      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+    );
+
+    if (!emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Format email tidak valid'),
+        ),
+      );
+      return;
+    }
+
+    // =========================
+    // VALIDASI PASSWORD
+    // =========================
+    final password = _passwordController.text;
+
+    final passwordRegex = RegExp(
+      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$',
+    );
+
+    if (!passwordRegex.hasMatch(password)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Password minimal 8 karakter dan harus mengandung huruf besar, huruf kecil, angka, dan simbol',
+          ),
+        ),
+      );
+      return;
+    }
+
     // cek email sudah ada
     final isExist =
         await DatabaseHelper.instance.isEmailExist(_emailController.text);
@@ -88,20 +126,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     // simpan session login
     await DatabaseHelper.instance.saveLoginSession(
-      userId: userId.toString(),
-      email: _emailController.text,
-    );
+        userId: userId.toString(), email: _emailController.text, rememberMe: 0);
 
     // CEK SESSION
     final session = await DatabaseHelper.instance.getLoginSession();
 
     print("SESSION REGISTER:");
     print(session);
-
-    Navigator.pushReplacementNamed(
-      context,
-      AppRoutes.connectWalker,
-    );
 
     Navigator.pushReplacementNamed(
       context,
@@ -277,6 +308,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
             onTogglePassword: () {
               setState(() => _obscurePassword = !_obscurePassword);
             },
+          ),
+          const SizedBox(height: 6),
+
+          Text(
+            'Minimal 8 karakter, terdiri dari huruf besar, huruf kecil, angka, dan simbol',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey,
+            ),
           ),
           const SizedBox(height: 32),
 
@@ -608,6 +648,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Expanded(
               child: Text(
                 value ?? hint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
                 style: TextStyle(
                   fontSize: 13,
                   color:
