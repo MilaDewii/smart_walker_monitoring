@@ -49,15 +49,15 @@ class AlertItem {
   final String id;
   final String title;
   final AlertLevel level;
-  final String time;       // formatted "21:25 WIB"
-  final String date;       // formatted "02 Juni 2026"
+  final String time;
+  final String date;
   final String description;
   final double score;
   final int durasiDetik;
   bool sudahDibaca;
   final LatLng location;
-  final String timestamp;  // raw ISO string dari Firebase
-  final String rawDate;    // raw date string "2026-06-02" untuk filter
+  final String timestamp;
+  final String rawDate;
 
   AlertItem({
     required this.id,
@@ -76,97 +76,86 @@ class AlertItem {
 
   IconData get icon => level.icon;
 
-  /// Parse dari snapshot Firebase RTDB
-  /// key = notif_001, value = Map<String, dynamic>
   factory AlertItem.fromFirebase(String key, Map<dynamic, dynamic> data) {
     final levelStr = (data['level'] ?? 'tinggi').toString();
     final level = AlertLevelExtension.fromString(levelStr);
 
-    // FIX: latitude bisa berupa string kosong "" di Firebase
-    // Gunakan _toDoubleStrict yang toleran terhadap string kosong/invalid
     final lat = _toDoubleStrict(data['latitude']) ?? 0.0;
     final lng = _toDoubleStrict(data['longitude']) ?? 0.0;
 
-    // Debug: ingatkan developer jika koordinat tidak valid dari Firebase
-    assert(
-      !(lat == 0.0 && lng == 0.0),
-      '[AlertItem] $key: latitude/longitude kosong atau 0,0! '
-      'Pastikan Firebase menyimpan nilai numerik, bukan string kosong "".',
-    );
+    // ← FIX: pakai $key bukan $id (id belum terdefinisi di sini)
+    if (lat == 0.0 && lng == 0.0) {
+      debugPrint('[AlertItem] $key: lat/lng kosong, lokasi tidak tersedia');
+    }
 
-    // timestamp: "2026-06-02 21:25:00"
-    final rawTs  = (data['timestamp'] ?? '').toString();
-    // time bisa berupa "21:25:00" standalone ATAU bagian dari timestamp
-    final rawTime = (data['time'] ?? '').toString();
-    // date bisa berupa "2026-06-02" standalone
+    final rawTs      = (data['timestamp'] ?? '').toString();
+    final rawTime    = (data['time'] ?? '').toString();
     final rawDateStr = (data['date'] ?? '').toString();
 
-    final timePart = _parseTime(rawTime, rawTs);
-    final datePart = _parseDate(rawDateStr.isNotEmpty ? rawDateStr : rawTs);
-    // rawDate untuk keperluan filter "hari ini"
+    final timePart    = _parseTime(rawTime, rawTs);
+    final datePart    = _parseDate(rawDateStr.isNotEmpty ? rawDateStr : rawTs);
     final rawDateOnly = rawDateStr.isNotEmpty
         ? rawDateStr.split(' ').first
         : rawTs.split(' ').first;
 
     return AlertItem(
-      id: (data['id'] ?? key).toString(),
-      title: (data['title'] ?? '').toString(),
-      level: level,
-      time: timePart,
-      date: datePart,
+      id:          (data['id'] ?? key).toString(),
+      title:       (data['title'] ?? '').toString(),
+      level:       level,
+      time:        timePart,
+      date:        datePart,
       description: (data['description'] ?? '').toString(),
-      score: _toDoubleStrict(data['score']) ?? 0.0,
+      score:       _toDoubleStrict(data['score']) ?? 0.0,
       durasiDetik: _toInt(data['durasiDetik']) ?? 0,
       sudahDibaca: data['sudahDibaca'] == true,
-      location: LatLng(lat, lng),
-      timestamp: rawTs,
-      rawDate: rawDateOnly,
+      location:    LatLng(lat, lng),
+      timestamp:   rawTs,
+      rawDate:     rawDateOnly,
     );
   }
 
   Map<String, dynamic> toFirebase() {
     return {
-      'id': id,
-      'title': title,
-      'level': level.name,
+      'id':          id,
+      'title':       title,
+      'level':       level.name,
       'description': description,
-      'score': score,
+      'score':       score,
       'durasiDetik': durasiDetik,
       'sudahDibaca': sudahDibaca,
-      'latitude': location.latitude,
-      'longitude': location.longitude,
-      'timestamp': timestamp,
-      'date': rawDate,
+      'latitude':    location.latitude,
+      'longitude':   location.longitude,
+      'timestamp':   timestamp,
+      'date':        rawDate,
     };
   }
 
   AlertItem copyWith({bool? sudahDibaca}) {
     return AlertItem(
-      id: id,
-      title: title,
-      level: level,
-      time: time,
-      date: date,
+      id:          id,
+      title:       title,
+      level:       level,
+      time:        time,
+      date:        date,
       description: description,
-      score: score,
+      score:       score,
       durasiDetik: durasiDetik,
       sudahDibaca: sudahDibaca ?? this.sudahDibaca,
-      location: location,
-      timestamp: timestamp,
-      rawDate: rawDate,
+      location:    location,
+      timestamp:   timestamp,
+      rawDate:     rawDate,
     );
   }
 
   // ── Helpers ──────────────────────────────────────────────
 
-  /// FIX: Menangani semua tipe: double, int, num, string angka, string kosong, null
   static double? _toDoubleStrict(dynamic v) {
     if (v == null) return null;
     if (v is double) return v;
     if (v is int) return v.toDouble();
     if (v is num) return v.toDouble();
     final str = v.toString().trim();
-    if (str.isEmpty) return null; // latitude: "" di Firebase → null → 0.0
+    if (str.isEmpty) return null;
     return double.tryParse(str);
   }
 
@@ -178,11 +167,7 @@ class AlertItem {
     return int.tryParse(str);
   }
 
-  /// FIX: Mendukung dua format:
-  ///   - "21:25:00"           → standalone time field dari Firebase
-  ///   - "2026-06-02 21:25:00" → fallback dari timestamp
   static String _parseTime(String rawTime, String rawTimestamp) {
-    // Coba parse dari field time langsung ("21:25:00")
     if (rawTime.isNotEmpty) {
       try {
         final parts = rawTime.split(':');
@@ -191,7 +176,6 @@ class AlertItem {
         }
       } catch (_) {}
     }
-    // Fallback: ambil dari timestamp "2026-06-02 21:25:00"
     try {
       final segments = rawTimestamp.split(' ');
       if (segments.length >= 2) {
@@ -204,7 +188,6 @@ class AlertItem {
     return rawTime.isNotEmpty ? rawTime : rawTimestamp;
   }
 
-  /// "2026-06-02" atau "2026-06-02 21:25:00"  →  "02 Juni 2026"
   static String _parseDate(String raw) {
     const months = [
       '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -212,7 +195,7 @@ class AlertItem {
     ];
     try {
       final datePart = raw.split(' ').first;
-      final parts = datePart.split('-');
+      final parts    = datePart.split('-');
       if (parts.length >= 3) {
         final day   = parts[2].padLeft(2, '0');
         final month = int.parse(parts[1]);

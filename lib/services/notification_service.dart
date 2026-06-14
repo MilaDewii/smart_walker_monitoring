@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
-
 import '../models/alert_model.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 // ============================================================
 // NOTIFICATION SERVICE
@@ -23,6 +26,9 @@ import 'package:flutter/foundation.dart';
 class NotificationService {
   final FirebaseDatabase _db;
   final String walkerId;
+  static const String _oneSignalAppId = "5b4eba8b-7292-4705-a67c-1810e621e035";
+  static const String _oneSignalApiKey =
+      "os_v2_app_lnhlvc3ssjdqljt4daiomipagxylbu6xk5oezufspxdrpfxygaaoh2vvqrb724lhamayh4qojdrsdrlfsfn3vhx6vuorbtqhcp6zshi";
 
   NotificationService({
     required this.walkerId,
@@ -87,6 +93,55 @@ class NotificationService {
 
     items.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return items;
+  }
+
+  Future<void> saveOneSignalId() async {
+    try {
+      final id = OneSignal.User.pushSubscription.id;
+      if (id == null || id.isEmpty) {
+        debugPrint('[OneSignal] Player ID null/kosong');
+        return;
+      }
+      await _db.ref('Walkers/$walkerId/oneSignalId').set(id);
+      debugPrint('[OneSignal] ID disimpan: $id');
+    } catch (e) {
+      debugPrint('[OneSignal] saveOneSignalId error: $e');
+    }
+  }
+
+  Future<void> sendOneSignalNotif({
+    required String playerId,
+    required String title,
+    required String body,
+    required String level,
+    required Map<String, String> data,
+  }) async {
+    final color = level == 'darurat'
+        ? 'EF4444'
+        : level == 'tinggi'
+            ? 'F97316'
+            : '22C55E';
+    try {
+      final resp = await http.post(
+        Uri.parse('https://onesignal.com/api/v1/notifications'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic $_oneSignalApiKey',
+        },
+        body: jsonEncode({
+          'app_id': _oneSignalAppId,
+          'include_player_ids': [playerId],
+          'headings': {'en': title},
+          'contents': {'en': body},
+          'data': data,
+          'android_accent_color': color,
+          'priority': 10,
+        }),
+      );
+      debugPrint('[OneSignal] Kirim notif: ${resp.statusCode} ${resp.body}');
+    } catch (e) {
+      debugPrint('[OneSignal] sendOneSignalNotif error: $e');
+    }
   }
 
   // ── UPDATE: Tandai satu notif sudah dibaca ────────────────
@@ -170,5 +225,83 @@ class NotificationService {
     return watchNotifications().map(
       (items) => items.where((i) => !i.sudahDibaca).length,
     );
+  }
+
+  // ── LISTENER: Push OneSignal saat ada notif baru ─────────
+  StreamSubscription<DatabaseEvent> listenAndPushOneSignal() {
+    final startTime = DateTime.now().millisecondsSinceEpoch;
+    final Set<String> _processedKeys = {};
+
+    // Step 1: Kirim push untuk notif LAMA yang sudah ada & belum dibaca
+    _notifRef.get().then((snap) async {
+      if (!snap.exists || snap.value == null) return;
+      final map = Map<String, dynamic>.from(snap.value as Map);
+
+      final idSnap = await _db.ref('Walkers/$walkerId/oneSignalId').get();
+      if (!idSnap.exists || idSnap.value == null) return;
+      final playerId = idSnap.value.toString();
+
+      for (final entry in map.entries) {
+        final key = entry.key.toString();
+        final data = Map<String, dynamic>.from(entry.value as Map);
+
+        if (data['sudahDibaca'] == true) continue; // skip yang sudah dibaca
+
+        _processedKeys.add(key); // tandai sudah diproses
+
+        await sendOneSignalNotif(
+          playerId: playerId,
+          title: data['title']?.toString() ?? 'Peringatan',
+          body: data['description']?.toString() ?? '',
+          level: data['level']?.toString() ?? 'tinggi',
+          data: {
+            'notifId': key,
+            'walkerId': walkerId,
+            'latitude': data['latitude']?.toString() ?? '0',
+            'longitude': data['longitude']?.toString() ?? '0',
+            'level': data['level']?.toString() ?? 'tinggi',
+          },
+        );
+        debugPrint('[OneSignal] Push notif lama: $key');
+      }
+    });
+
+    // Step 2: Listen notif BARU yang masuk setelah app dibuka
+    return _notifRef.onChildAdded.listen((event) async {
+      final key = event.snapshot.key ?? '';
+      if (key.isEmpty) return;
+
+      // Skip kalau sudah diproses di Step 1 (notif lama)
+      if (_processedKeys.contains(key)) return;
+
+      final raw = event.snapshot.value;
+      if (raw == null) return;
+
+      final data = Map<String, dynamic>.from(raw as Map);
+      if (data['sudahDibaca'] == true) return;
+
+      debugPrint('[OneSignal] Notif baru diterima: $key');
+
+      final idSnap = await _db.ref('Walkers/$walkerId/oneSignalId').get();
+      if (!idSnap.exists || idSnap.value == null) {
+        debugPrint('[OneSignal] oneSignalId tidak ada');
+        return;
+      }
+
+      await sendOneSignalNotif(
+        playerId: idSnap.value.toString(),
+        title: data['title']?.toString() ?? 'Peringatan',
+        body: data['description']?.toString() ?? '',
+        level: data['level']?.toString() ?? 'tinggi',
+        data: {
+          'notifId': key,
+          'walkerId': walkerId,
+          'latitude': data['latitude']?.toString() ?? '0',
+          'longitude': data['longitude']?.toString() ?? '0',
+          'level': data['level']?.toString() ?? 'tinggi',
+        },
+      );
+      debugPrint('[OneSignal] Push notif baru: $key');
+    });
   }
 }

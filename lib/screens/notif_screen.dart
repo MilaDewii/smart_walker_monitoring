@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+// import 'package:latlong2/latlong.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../database/database_helper.dart';
 import '../models/alert_model.dart';
@@ -25,8 +26,8 @@ class _C {
   static const Color tinggiBg = Color(0xFFFEE2E2);
   static const Color daruratText = AppColors.statusYellow;
   static const Color daruratBg = Color(0xFFFFF3CD);
-  static const Color waspadaText = AppColors.statusGreen;
-  static const Color waspadaBg = Color(0xFFDCFCE7);
+  static const Color waspadaText = Color.fromARGB(255, 245, 158, 11);
+  static const Color waspadaBg = Color(0xFFFFF3CD);
   static const Color unreadDot = AppColors.statusRed;
 }
 
@@ -107,6 +108,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
       }
 
       _service = NotificationService(walkerId: walkerId);
+      await _service!.saveOneSignalId();
+
       _walkerSub = _service!.watchNotifications().listen(
         (items) {
           if (mounted) setState(() { _alerts = items; _isLoading = false; });
@@ -614,7 +617,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       case AlertLevel.darurat:
         return {'label': 'Darurat', 'text': _C.daruratText, 'bg': _C.daruratBg, 'badgeBg': _C.daruratText.withOpacity(0.12)};
       case AlertLevel.waspada:
-        return {'label': 'Waspada', 'text': _C.waspadaText, 'bg': _C.waspadaBg, 'badgeBg': _C.waspadaText.withOpacity(0.12)};
+        return {'label': 'Waspada', 'text': _C.waspadaText, 'bg': const Color(0xFFFFF3CD), 'badgeBg': _C.waspadaText.withOpacity(0.12)};
     }
   }
 }

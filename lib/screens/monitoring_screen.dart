@@ -8,6 +8,7 @@ import '../services/monitoring_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
 import 'widgets/location_card.dart';
+import 'widgets/status_banner.dart';
 
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
@@ -87,7 +88,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
 
     if (walkerId == null || walkerId.isEmpty) return;
 
-    _walkerSub?.cancel(); // pastikan tidak double subscribe
+    _walkerSub?.cancel();
     _walkerSub =
         MonitoringService.instance.watchWalker(walkerId).listen((data) {
       if (!mounted) return;
@@ -222,6 +223,15 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                   child: Column(
                     children: [
                       const SizedBox(height: 12),
+
+                      // ── STATUS BANNER ────────────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: StatusBanner(walkerData: _walkerData),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // ── LOCATION CARD ────────────────────────────────────
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: LocationCard(
@@ -230,6 +240,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                           parentContext: context,
                         ),
                       ),
+
                       const SizedBox(height: 12),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -268,7 +279,6 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
         children: [
           Row(
             children: [
-              // Avatar
               CircleAvatar(
                 radius: 24,
                 backgroundColor: AppColors.primary.withOpacity(0.15),
@@ -328,7 +338,6 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          // Search bar
           Container(
             height: 42,
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -527,7 +536,6 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
           _sensorItem('Ultrasonic Back', _ultraBack),
           _sensorItem('Walker Aktif', _walkerActive),
           const Divider(height: 20, thickness: 0.8),
-          // Geofence info
           Row(
             children: [
               Icon(Icons.fence_rounded,
@@ -581,13 +589,11 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
             height: 10,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color:
-                  aktif ? AppColors.statusGreen : AppColors.statusRed,
+              color: aktif ? AppColors.statusGreen : AppColors.statusRed,
               boxShadow: aktif
                   ? [
                       BoxShadow(
-                          color:
-                              AppColors.statusGreen.withOpacity(0.4),
+                          color: AppColors.statusGreen.withOpacity(0.4),
                           blurRadius: 4)
                     ]
                   : [],
@@ -595,16 +601,14 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
           ),
           const SizedBox(width: 10),
           Text(nama,
-              style: TextStyle(
-                  fontSize: 13, color: AppColors.textDark)),
+              style: TextStyle(fontSize: 13, color: AppColors.textDark)),
           const Spacer(),
           Text(
             aktif ? 'Aktif' : 'Tidak Aktif',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color:
-                  aktif ? AppColors.statusGreen : AppColors.statusRed,
+              color: aktif ? AppColors.statusGreen : AppColors.statusRed,
             ),
           ),
         ],
@@ -677,8 +681,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
                       fontSize: 11, color: AppColors.textGrey),
                 ),
                 isThreeLine: true,
-                onTap: () =>
-                    ScaffoldMessenger.of(context).showSnackBar(
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Buka: ${e['title']}')),
                 ),
               ),

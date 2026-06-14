@@ -33,7 +33,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
               // Logo SVG - ukuran besar seperti design
               SvgPicture.asset(
-                'assets/images/Guardian.svg',
+                'assets/images/logo_guard.svg',
                 width: 300,
                 height: 300,
               ),

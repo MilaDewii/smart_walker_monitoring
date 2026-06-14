@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter/services.dart';
 import '../../models/walker_data.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_routes.dart';
 
-/// Card lokasi yang tampil di MonitoringScreen.
-/// - Jika geofence belum diatur  → tampilkan empty state
-/// - Jika geofence sudah ada     → tampilkan peta + info
-class LocationCard extends StatelessWidget {
+class LocationCard extends StatefulWidget {
   final WalkerData walkerData;
   final String? walkerId;
   final BuildContext parentContext;
@@ -21,13 +17,27 @@ class LocationCard extends StatelessWidget {
     required this.parentContext,
   });
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  @override
+  State<LocationCard> createState() => _LocationCardState();
+}
+
+class _LocationCardState extends State<LocationCard> {
+  final MapController _mapController = MapController();
+  bool _mapReady = false;
+
   bool get _hasGeofence =>
-      walkerData.geofenceCenter.latitude != 0.0 ||
-      walkerData.geofenceCenter.longitude != 0.0;
+      widget.walkerData.geofenceCenter.latitude != 0.0 ||
+      widget.walkerData.geofenceCenter.longitude != 0.0;
+
+  LatLng get _centerTarget {
+    // Prioritas: posisi lansia → geofence center → default
+    final pos = widget.walkerData.position;
+    if (pos.latitude != 0.0 || pos.longitude != 0.0) return pos;
+    return widget.walkerData.geofenceCenter;
+  }
 
   Color get _statusColor {
-    switch (walkerData.status) {
+    switch (widget.walkerData.status) {
       case 'bahaya':
         return AppColors.statusRed;
       case 'peringatan':
@@ -37,15 +47,26 @@ class LocationCard extends StatelessWidget {
     }
   }
 
-  Color get _geofenceBadgeColor =>
-      walkerData.geofenceStatus == 'inside'
-          ? AppColors.statusGreen
-          : AppColors.statusRed;
+  Color get _geofenceBadgeColor => widget.walkerData.geofenceStatus == 'inside'
+      ? AppColors.statusGreen
+      : AppColors.statusRed;
 
-  String get _geofenceBadgeLabel =>
-      walkerData.geofenceStatus == 'inside' ? 'Area Aman' : 'Di Luar Area!';
+  String get _geofenceBadgeLabel => widget.walkerData.geofenceStatus == 'inside'
+      ? 'Area Aman'
+      : 'Di Luar Area!';
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  @override
+  void didUpdateWidget(LocationCard old) {
+    super.didUpdateWidget(old);
+    // Auto-center peta saat posisi lansia berubah
+    if (_mapReady && widget.walkerData.position != old.walkerData.position) {
+      final pos = widget.walkerData.position;
+      if (pos.latitude != 0.0 || pos.longitude != 0.0) {
+        _mapController.move(pos, 15);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -64,66 +85,45 @@ class LocationCard extends StatelessWidget {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // EMPTY STATE – belum ada geofence
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Empty State ───────────────────────────────────────────────────────────
   Widget _buildEmptyState(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // Header
           Row(
             children: [
-              Text(
-                'Lokasi Lansia',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
-                ),
-              ),
+              Text('Lokasi Lansia',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark)),
             ],
           ),
           const SizedBox(height: 24),
-
-          // Ilustrasi
           Container(
             width: 90,
             height: 90,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0F4F8),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.home_outlined,
-              size: 44,
-              color: AppColors.textGrey.withOpacity(0.6),
-            ),
+            decoration: const BoxDecoration(
+                color: Color(0xFFF0F4F8), shape: BoxShape.circle),
+            child: Icon(Icons.home_outlined,
+                size: 44, color: AppColors.textGrey.withOpacity(0.6)),
           ),
           const SizedBox(height: 16),
-
-          Text(
-            'Belum Ada Area Aman',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textDark,
-            ),
-          ),
+          Text('Belum Ada Area Aman',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark)),
           const SizedBox(height: 8),
           Text(
             'Tentukan lokasi rumah untuk memulai monitoring '
             'dan fitur geofence.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textGrey,
-              height: 1.5,
-            ),
+            style:
+                TextStyle(fontSize: 13, color: AppColors.textGrey, height: 1.5),
           ),
           const SizedBox(height: 20),
-
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -140,8 +140,8 @@ class LocationCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
-                textStyle: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600),
+                textStyle:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -150,35 +150,29 @@ class LocationCard extends StatelessWidget {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PETA – geofence sudah ada
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Map Card ──────────────────────────────────────────────────────────────
   Widget _buildMapCard(BuildContext context) {
-    final posisi = walkerData.position;
-    final geofenceCenter = walkerData.geofenceCenter;
-    final geofenceRadius = walkerData.geofenceRadius;
+    final posisi = widget.walkerData.position;
+    final geofenceCenter = widget.walkerData.geofenceCenter;
+    final geofenceRadius = widget.walkerData.geofenceRadius;
+    final hasLansiaPos = posisi.latitude != 0.0 || posisi.longitude != 0.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Title + badge
+        // Header
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
-              Text(
-                'Lokasi Lansia',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
-                ),
-              ),
+              Text('Lokasi Lansia',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark)),
               const Spacer(),
-              // Badge geofence dinamis
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: _geofenceBadgeColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
@@ -195,14 +189,11 @@ class LocationCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 5),
-                    Text(
-                      _geofenceBadgeLabel,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: _geofenceBadgeColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text(_geofenceBadgeLabel,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: _geofenceBadgeColor,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -210,23 +201,28 @@ class LocationCard extends StatelessWidget {
           ),
         ),
 
-        // Peta
+        // Peta — auto-center ke posisi lansia/geofence
         ClipRRect(
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.zero,
-            bottomRight: Radius.zero,
-          ),
           child: SizedBox(
             height: 180,
             child: FlutterMap(
+              mapController: _mapController,
               options: MapOptions(
-                initialCenter: posisi,
+                // initialCenter ke posisi yang benar sejak awal
+                initialCenter: _centerTarget,
                 initialZoom: 15,
+                onMapReady: () {
+                  setState(() => _mapReady = true);
+                  // Pastikan center sudah benar saat map siap
+                  final target = _centerTarget;
+                  if (target.latitude != 0.0 || target.longitude != 0.0) {
+                    _mapController.move(target, 15);
+                  }
+                },
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.guardianwalk.app',
                 ),
                 // Geofence lingkaran
@@ -240,7 +236,7 @@ class LocationCard extends StatelessWidget {
                     useRadiusInMeter: true,
                   ),
                 ]),
-                // Marker rumah (pusat geofence)
+                // Marker rumah
                 MarkerLayer(markers: [
                   Marker(
                     point: geofenceCenter,
@@ -250,16 +246,17 @@ class LocationCard extends StatelessWidget {
                         color: _geofenceBadgeColor, size: 28),
                   ),
                 ]),
-                // Marker posisi lansia
-                MarkerLayer(markers: [
-                  Marker(
-                    point: posisi,
-                    width: 40,
-                    height: 40,
-                    child: Icon(Icons.location_pin,
-                        color: _statusColor, size: 40),
-                  ),
-                ]),
+                // Marker lansia (hanya kalau GPS sudah ada)
+                if (hasLansiaPos)
+                  MarkerLayer(markers: [
+                    Marker(
+                      point: posisi,
+                      width: 40,
+                      height: 40,
+                      child: Icon(Icons.location_pin,
+                          color: _statusColor, size: 40),
+                    ),
+                  ]),
               ],
             ),
           ),
@@ -272,32 +269,30 @@ class LocationCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Lat: ${posisi.latitude.toStringAsFixed(5)}'
-                  '   Lng: ${posisi.longitude.toStringAsFixed(5)}',
-                  style:
-                      TextStyle(fontSize: 11, color: AppColors.textGrey),
+                  hasLansiaPos
+                      ? 'Lat: ${posisi.latitude.toStringAsFixed(5)}'
+                          '   Lng: ${posisi.longitude.toStringAsFixed(5)}'
+                      : 'GPS Lansia belum tersedia',
+                  style: TextStyle(fontSize: 11, color: AppColors.textGrey),
                 ),
               ),
-              // Badge koneksi
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: (walkerId != null
+                  color: (widget.walkerId != null
                           ? AppColors.statusGreen
                           : AppColors.statusRed)
                       .withOpacity(0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  walkerId != null ? 'Terhubung' : 'Tidak Terhubung',
+                  widget.walkerId != null ? 'Terhubung' : 'Tidak Terhubung',
                   style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: walkerId != null
-                        ? AppColors.statusGreen
-                        : AppColors.statusRed,
-                  ),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: widget.walkerId != null
+                          ? AppColors.statusGreen
+                          : AppColors.statusRed),
                 ),
               ),
             ],
@@ -312,20 +307,17 @@ class LocationCard extends StatelessWidget {
               Icon(Icons.access_time_rounded,
                   size: 12, color: AppColors.textGrey),
               const SizedBox(width: 4),
-              Text(
-                'Update: ${walkerData.lastUpdate}',
-                style: TextStyle(fontSize: 10, color: AppColors.textGrey),
-              ),
+              Text('Update: ${widget.walkerData.lastUpdate}',
+                  style: TextStyle(fontSize: 10, color: AppColors.textGrey)),
             ],
           ),
         ),
 
-        // Tombol-tombol
+        // Tombol
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
           child: Row(
             children: [
-              // Atur ulang geofence
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => Navigator.pushNamed(
@@ -333,8 +325,7 @@ class LocationCard extends StatelessWidget {
                     AppRoutes.geofenceSetup,
                     arguments: {'fromDashboard': true},
                   ),
-                  icon: const Icon(Icons.edit_location_alt_rounded,
-                      size: 16),
+                  icon: const Icon(Icons.edit_location_alt_rounded, size: 16),
                   label: const Text('Ubah'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.primary,
@@ -348,7 +339,6 @@ class LocationCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              // Lihat lokasi penuh
               Expanded(
                 flex: 2,
                 child: ElevatedButton.icon(

@@ -58,6 +58,8 @@ dependencies:
   shared_preferences: ^2.5.3
   mobile_scanner: ^6.0.11
   permission_handler: ^11.3.1
+  onesignal_flutter: ^5.2.5
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
@@ -95,6 +97,9 @@ flutter:
     - assets/images/peringatan ijo.svg
     - assets/images/peringatan kuning.png
     - assets/images/peringatan merah.png
+    - assets/images/guardiann.svg
+    - assets/images/logo_guardian.svg
+    - assets/images/logo_guard.svg
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

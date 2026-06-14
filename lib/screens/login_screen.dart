@@ -81,9 +81,9 @@ Navigator.pushReplacementNamed(
 
               // Logo SVG
               SvgPicture.asset(
-                'assets/images/Guardian.svg',
-                width: 90,
-                height: 90,
+                'assets/images/logo_guard.svg',
+                width: 135,
+                height: 135,
               ),
               const SizedBox(height: 8),
 
