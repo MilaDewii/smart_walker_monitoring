@@ -16,24 +16,22 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String _namaUser = 'User';
   File? _fotoFile;
-  // ── 1. GEOFENCE ──────────────────────────────────────
-  double _safeRadius = 50.0; // meter
 
-  // ── 2. SENSOR CALIBRATION ────────────────────────────
+  // ── 1. SENSOR CALIBRATION ────────────────────────────
   bool _calibMPU = false;
   bool _calibUltrasonic = false;
   bool _calibGPS = false;
 
-  // ── 3. THRESHOLD ─────────────────────────────────────
+  // ── 2. THRESHOLD ─────────────────────────────────────
   double _warningThreshold = 0.7;
   double _dangerThreshold = 1.0;
 
-  // ── 4. NOTIFICATION ──────────────────────────────────
+  // ── 3. NOTIFICATION ──────────────────────────────────
   bool _alertSound = true;
   bool _vibration = true;
   String _soundMode = 'Normal'; // Normal | Silent | Loud
 
-  // ── 5. PAIR DEVICE — handled via dialog ──────────────
+  // ── 4. PAIR DEVICE — handled via dialog ──────────────
 
   // ── 6. CONNECTION ─────────────────────────────────────
   // final bool _wifiStatus = true;
@@ -79,7 +77,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (settings != null) {
       setState(() {
-        _safeRadius = (settings['geofence_radius'] ?? 50).toDouble();
 
         _warningThreshold = (settings['warning_threshold'] ?? 0.7).toDouble();
 
@@ -115,7 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (settings == null) {
       await DatabaseHelper.instance.saveSettings(
-        geofenceRadius: _safeRadius.toInt(),
         warningThreshold: _warningThreshold,
         dangerThreshold: _dangerThreshold,
         mpu6050Calibration: _calibMPU ? 1 : 0,
@@ -128,7 +124,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } else {
       await DatabaseHelper.instance.updateSettings(
         id: settings['id'],
-        geofenceRadius: _safeRadius.toInt(),
         warningThreshold: _warningThreshold,
         dangerThreshold: _dangerThreshold,
         mpu6050Calibration: _calibMPU ? 1 : 0,
@@ -199,7 +194,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      _buildGeofence(),
                       const SizedBox(height: 16),
                       _buildThreshold(),
                       const SizedBox(height: 16),
@@ -283,161 +277,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── 1. GEOFENCE SETTING ──────────────────────────────
-  Widget _buildGeofence() {
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionTitle(
-              'Geofence Setting', Icons.fence_outlined, AppColors.primary),
-          const SizedBox(height: 4),
-          Text('Atur radius zona aman lansia',
-              style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-          const SizedBox(height: 16),
-          // Radius display
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.statusGreen.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child:
-                    Icon(Icons.radar, color: AppColors.statusGreen, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Safe Radius',
-                        style:
-                            TextStyle(fontSize: 13, color: AppColors.textGrey)),
-                    Text(
-                      '${_safeRadius.toInt()} meter',
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.statusGreen),
-                    ),
-                  ],
-                ),
-              ),
-              // Input langsung
-              SizedBox(
-                width: 72,
-                child: TextField(
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  textAlign: TextAlign.center,
-                  decoration: InputDecoration(
-                    hintText: '${_safeRadius.toInt()}',
-                    hintStyle: TextStyle(color: AppColors.textGrey),
-                    filled: true,
-                    fillColor: const Color(0xFFF0F4F8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                    suffixText: 'm',
-                    suffixStyle:
-                        TextStyle(fontSize: 11, color: AppColors.textGrey),
-                  ),
-                  onChanged: (val) {
-                    final v = double.tryParse(val);
-                    if (v != null && v >= 10 && v <= 500) {
-                      setState(() => _safeRadius = v);
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Slider
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: AppColors.statusGreen,
-              inactiveTrackColor: AppColors.statusGreen.withOpacity(0.2),
-              thumbColor: AppColors.statusGreen,
-              overlayColor: AppColors.statusGreen.withOpacity(0.15),
-              trackHeight: 6,
-            ),
-            child: Slider(
-              value: _safeRadius.clamp(10, 500),
-              min: 10,
-              max: 500,
-              divisions: 49,
-              onChanged: (v) {
-                setState(() {
-                  _safeRadius = v;
-                });
-
-                _saveSettings();
-              },
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('10 m',
-                  style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
-              Text('500 m',
-                  style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Quick select preset
-          Row(
-            children: [
-              _buildPresetChip('10m', 10),
-              const SizedBox(width: 8),
-              _buildPresetChip('50m', 50),
-              const SizedBox(width: 8),
-              _buildPresetChip('100m', 100),
-              const SizedBox(width: 8),
-              _buildPresetChip('200m', 200),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPresetChip(String label, double value) {
-    final bool selected = _safeRadius == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _safeRadius = value),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.statusGreen
-                : AppColors.statusGreen.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected
-                  ? AppColors.statusGreen
-                  : AppColors.statusGreen.withOpacity(0.2),
-            ),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppColors.statusGreen),
-          ),
-        ),
-      ),
-    );
-  }
+  // Widget _buildPresetChip(String label, double value) {
+  //   return Expanded(
+  //     child: GestureDetector(
+  //       child: Container(
+  //         padding: const EdgeInsets.symmetric(vertical: 8),
+  //         decoration: BoxDecoration(
+  //           color: selected
+  //               ? AppColors.statusGreen
+  //               : AppColors.statusGreen.withOpacity(0.08),
+  //           borderRadius: BorderRadius.circular(8),
+  //           border: Border.all(
+  //             color: selected
+  //                 ? AppColors.statusGreen
+  //                 : AppColors.statusGreen.withOpacity(0.2),
+  //           ),
+  //         ),
+  //         child: Text(
+  //           label,
+  //           textAlign: TextAlign.center,
+  //           style: TextStyle(
+  //               fontSize: 12,
+  //               fontWeight: FontWeight.w600,
+  //               color: selected ? Colors.white : AppColors.statusGreen),
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   // ── 2. THRESHOLD SETTING ─────────────────────────────
   Widget _buildThreshold() {

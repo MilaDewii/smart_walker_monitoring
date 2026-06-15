@@ -223,7 +223,6 @@ CREATE TABLE cache_history(
 
   //Settings CRUD
   Future<int> saveSettings({
-    required int geofenceRadius,
     required double warningThreshold,
     required double dangerThreshold,
     required int mpu6050Calibration,
@@ -238,7 +237,6 @@ CREATE TABLE cache_history(
     return await db.insert(
       'settings',
       {
-        'geofence_radius': geofenceRadius,
         'warning_threshold': warningThreshold,
         'danger_threshold': dangerThreshold,
         'mpu6050_calibration': mpu6050Calibration,
@@ -294,7 +292,6 @@ CREATE TABLE cache_history(
 
   Future<int> updateSettings({
     required int id,
-    required int geofenceRadius,
     required double warningThreshold,
     required double dangerThreshold,
     required int mpu6050Calibration,
@@ -309,7 +306,6 @@ CREATE TABLE cache_history(
     return await db.update(
       'settings',
       {
-        'geofence_radius': geofenceRadius,
         'warning_threshold': warningThreshold,
         'danger_threshold': dangerThreshold,
         'mpu6050_calibration': mpu6050Calibration,

@@ -28,7 +28,7 @@ class NotificationService {
   final String walkerId;
   static const String _oneSignalAppId = "5b4eba8b-7292-4705-a67c-1810e621e035";
   static const String _oneSignalApiKey =
-      "os_v2_app_lnhlvc3ssjdqljt4daiomipagxylbu6xk5oezufspxdrpfxygaaoh2vvqrb724lhamayh4qojdrsdrlfsfn3vhx6vuorbtqhcp6zshi";
+      "os_v2_app_lnhlvc3ssjdqljt4daiomipagvncus2bbjeu7yuvyfuxbi7tqx356eii46z4blek6uoupf6f3qb6zdg3g26acshelvwngfnfcw54glq";
 
   NotificationService({
     required this.walkerId,
@@ -116,31 +116,25 @@ class NotificationService {
     required String level,
     required Map<String, String> data,
   }) async {
-    final color = level == 'darurat'
-        ? 'EF4444'
-        : level == 'tinggi'
-            ? 'F97316'
-            : '22C55E';
     try {
       final resp = await http.post(
-        Uri.parse('https://onesignal.com/api/v1/notifications'),
+        Uri.parse('https://api.onesignal.com/notifications'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic $_oneSignalApiKey',
+          'Authorization': 'Key $_oneSignalApiKey', // ganti "Basic" → "Key"
         },
         body: jsonEncode({
           'app_id': _oneSignalAppId,
-          'include_player_ids': [playerId],
+          'include_subscription_ids': [playerId], // ganti include_player_ids
           'headings': {'en': title},
           'contents': {'en': body},
           'data': data,
-          'android_accent_color': color,
           'priority': 10,
         }),
       );
-      debugPrint('[OneSignal] Kirim notif: ${resp.statusCode} ${resp.body}');
+      debugPrint('[OneSignal] ${resp.statusCode} ${resp.body}');
     } catch (e) {
-      debugPrint('[OneSignal] sendOneSignalNotif error: $e');
+      debugPrint('[OneSignal] error: $e');
     }
   }
 
