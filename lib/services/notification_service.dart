@@ -6,65 +6,39 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 
-// ============================================================
-// NOTIFICATION SERVICE
-// ============================================================
-/// Mengelola operasi RTDB untuk notifikasi walker.
-/// Path: Walkers/{walkerId}/notifications/{notifId}/
-///
-/// CATATAN STRUKTUR FIREBASE:
-/// Walkers/
-///   {walkerId}/
-///     notifications/
-///       notif_001/
-///         id: "notif_001"       ← field id di dalam node
-///         sudahDibaca: false
-///         ...
-///
-/// Node key (notif_001) dan field id harus SAMA agar markAllAsRead bekerja.
-/// Jika berbeda, gunakan markAsRead(item.id) yang menggunakan field id.
 class NotificationService {
   final FirebaseDatabase _db;
   final String walkerId;
   static const String _oneSignalAppId = "5b4eba8b-7292-4705-a67c-1810e621e035";
   static const String _oneSignalApiKey =
-      "os_v2_app_lnhlvc3ssjdqljt4daiomipagvncus2bbjeu7yuvyfuxbi7tqx356eii46z4blek6uoupf6f3qb6zdg3g26acshelvwngfnfcw54glq";
+      "os_v2_app_lnhlvc3ssjdqljt4daiomipagv4424nure3ujhfqbccu7rf2xcnaecasfyvvtckgeqohpiqwbqnva5o3nhoft3eklw24wpajetqxwhi";
 
   NotificationService({
     required this.walkerId,
     FirebaseDatabase? database,
   }) : _db = database ?? FirebaseDatabase.instance;
 
-  // ── Ref helper ───────────────────────────────────────────
   DatabaseReference get _notifRef => _db.ref('Walkers/$walkerId/notification');
-
+  DatabaseReference get _idsRef => _db.ref('Walkers/$walkerId/oneSignalIds');
   DatabaseReference _notifItemRef(String notifId) => _notifRef.child(notifId);
 
   // ── READ: Stream realtime ─────────────────────────────────
-  /// Stream list notifikasi, diurutkan timestamp terbaru di atas.
   Stream<List<AlertItem>> watchNotifications() {
     return _notifRef.onValue.map((event) {
       final data = event.snapshot.value;
       if (data == null) return <AlertItem>[];
-
       final map = data as Map<dynamic, dynamic>;
       final List<AlertItem> items = [];
-
       for (final entry in map.entries) {
         try {
-          final item = AlertItem.fromFirebase(
+          items.add(AlertItem.fromFirebase(
             entry.key.toString(),
             entry.value as Map<dynamic, dynamic>,
-          );
-          items.add(item);
+          ));
         } catch (e) {
-          // Skip item yang gagal di-parse agar stream tidak putus
-          debugPrint('[NotificationService] Gagal parse notif '
-              '${entry.key}: $e');
+          debugPrint('[NotificationService] Gagal parse notif ${entry.key}: $e');
         }
       }
-
-      // Sort: terbaru di atas berdasarkan timestamp string
       items.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return items;
     });
@@ -74,27 +48,23 @@ class NotificationService {
   Future<List<AlertItem>> fetchNotifications() async {
     final snap = await _notifRef.get();
     if (!snap.exists || snap.value == null) return [];
-
     final map = snap.value as Map<dynamic, dynamic>;
     final List<AlertItem> items = [];
-
     for (final entry in map.entries) {
       try {
-        final item = AlertItem.fromFirebase(
+        items.add(AlertItem.fromFirebase(
           entry.key.toString(),
           entry.value as Map<dynamic, dynamic>,
-        );
-        items.add(item);
+        ));
       } catch (e) {
-        debugPrint('[NotificationService] Gagal parse notif '
-            '${entry.key}: $e');
+        debugPrint('[NotificationService] Gagal parse notif ${entry.key}: $e');
       }
     }
-
     items.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return items;
   }
 
+  // ── SAVE: Simpan playerID per device ─────────────────────
   Future<void> saveOneSignalId() async {
     try {
       final id = OneSignal.User.pushSubscription.id;
@@ -102,30 +72,50 @@ class NotificationService {
         debugPrint('[OneSignal] Player ID null/kosong');
         return;
       }
-      await _db.ref('Walkers/$walkerId/oneSignalId').set(id);
+      // Gunakan seluruh id sebagai key (hapus tanda -)
+      final deviceKey = id.replaceAll('-', '');
+      await _idsRef.child(deviceKey).set(id);
       debugPrint('[OneSignal] ID disimpan: $id');
     } catch (e) {
       debugPrint('[OneSignal] saveOneSignalId error: $e');
     }
   }
 
+  // ── Ambil semua playerIds dari Firebase ──────────────────
+  Future<List<String>> _getAllPlayerIds() async {
+    try {
+      final snap = await _idsRef.get();
+      if (!snap.exists || snap.value == null) return [];
+      final map = Map<String, dynamic>.from(snap.value as Map);
+      return map.values.map((v) => v.toString()).toList();
+    } catch (e) {
+      debugPrint('[OneSignal] _getAllPlayerIds error: $e');
+      return [];
+    }
+  }
+
+  // ── SEND: Kirim notif ke semua device ────────────────────
   Future<void> sendOneSignalNotif({
-    required String playerId,
+    required List<String> playerIds,
     required String title,
     required String body,
     required String level,
     required Map<String, String> data,
   }) async {
+    if (playerIds.isEmpty) {
+      debugPrint('[OneSignal] playerIds kosong, tidak kirim notif');
+      return;
+    }
     try {
       final resp = await http.post(
         Uri.parse('https://api.onesignal.com/notifications'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Key $_oneSignalApiKey', // ganti "Basic" → "Key"
+          'Authorization': 'Key $_oneSignalApiKey',
         },
         body: jsonEncode({
           'app_id': _oneSignalAppId,
-          'include_subscription_ids': [playerId], // ganti include_player_ids
+          'include_subscription_ids': playerIds,
           'headings': {'en': title},
           'contents': {'en': body},
           'data': data,
@@ -134,13 +124,11 @@ class NotificationService {
       );
       debugPrint('[OneSignal] ${resp.statusCode} ${resp.body}');
     } catch (e) {
-      debugPrint('[OneSignal] error: $e');
+      debugPrint('[OneSignal] sendOneSignalNotif error: $e');
     }
   }
 
   // ── UPDATE: Tandai satu notif sudah dibaca ────────────────
-  /// [notifId] harus sama dengan node key di Firebase (misal "notif_001").
-  /// Gunakan item.id yang sudah di-assign dari node key saat fromFirebase.
   Future<void> markAsRead(String notifId) async {
     try {
       await _notifItemRef(notifId).update({'sudahDibaca': true});
@@ -151,23 +139,14 @@ class NotificationService {
   }
 
   // ── UPDATE: Tandai semua sudah dibaca ────────────────────
-  /// FIX: Menggunakan multi-path update dalam satu transaksi RTDB
-  /// agar efisien (1 write request) dan atomic.
-  ///
-  /// Key pada [updates] adalah path relatif dari _notifRef,
-  /// contoh: "notif_001/sudahDibaca" = true
   Future<void> markAllAsRead(List<AlertItem> items) async {
-    // Hanya update yang belum dibaca agar tidak buang-buang write quota
     final unread = items.where((item) => !item.sudahDibaca).toList();
     if (unread.isEmpty) return;
-
     try {
       final Map<String, dynamic> updates = {};
       for (final item in unread) {
-        // Path relatif dari _notifRef → "notif_001/sudahDibaca"
         updates['${item.id}/sudahDibaca'] = true;
       }
-      // Satu kali write untuk semua notif (atomic multi-path update)
       await _notifRef.update(updates);
     } catch (e) {
       debugPrint('[NotificationService] markAllAsRead error: $e');
@@ -175,7 +154,7 @@ class NotificationService {
     }
   }
 
-  // ── WRITE: Tambah / update notifikasi ────────────────────
+  // ── WRITE: Tambah notifikasi ──────────────────────────────
   Future<void> addNotification(AlertItem item) async {
     try {
       await _notifItemRef(item.id).set(item.toFirebase());
@@ -196,7 +175,6 @@ class NotificationService {
   }
 
   // ── DELETE: Hapus semua notifikasi ───────────────────────
-  /// Berguna untuk fitur "Hapus Semua" di UI jika diperlukan.
   Future<void> deleteAllNotifications() async {
     try {
       await _notifRef.remove();
@@ -206,15 +184,12 @@ class NotificationService {
     }
   }
 
-  // ── UTIL: Hitung unread count (one-time) ─────────────────
-  /// Dipakai untuk badge angka di bottom nav bar.
+  // ── UTIL: Unread count ────────────────────────────────────
   Future<int> getUnreadCount() async {
     final items = await fetchNotifications();
     return items.where((i) => !i.sudahDibaca).length;
   }
 
-  // ── UTIL: Stream unread count (realtime) ─────────────────
-  /// Dipakai untuk badge angka live di bottom nav bar.
   Stream<int> watchUnreadCount() {
     return watchNotifications().map(
       (items) => items.where((i) => !i.sudahDibaca).length,
@@ -223,28 +198,29 @@ class NotificationService {
 
   // ── LISTENER: Push OneSignal saat ada notif baru ─────────
   StreamSubscription<DatabaseEvent> listenAndPushOneSignal() {
-    final startTime = DateTime.now().millisecondsSinceEpoch;
     final Set<String> _processedKeys = {};
 
-    // Step 1: Kirim push untuk notif LAMA yang sudah ada & belum dibaca
+    // Step 1: Kirim push untuk notif LAMA yang belum dibaca
     _notifRef.get().then((snap) async {
       if (!snap.exists || snap.value == null) return;
       final map = Map<String, dynamic>.from(snap.value as Map);
 
-      final idSnap = await _db.ref('Walkers/$walkerId/oneSignalId').get();
-      if (!idSnap.exists || idSnap.value == null) return;
-      final playerId = idSnap.value.toString();
+      final playerIds = await _getAllPlayerIds();
+      if (playerIds.isEmpty) {
+        debugPrint('[OneSignal] Tidak ada playerIds tersimpan');
+        return;
+      }
 
       for (final entry in map.entries) {
         final key = entry.key.toString();
         final data = Map<String, dynamic>.from(entry.value as Map);
 
-        if (data['sudahDibaca'] == true) continue; // skip yang sudah dibaca
+        if (data['sudahDibaca'] == true) continue;
 
-        _processedKeys.add(key); // tandai sudah diproses
+        _processedKeys.add(key);
 
         await sendOneSignalNotif(
-          playerId: playerId,
+          playerIds: playerIds,
           title: data['title']?.toString() ?? 'Peringatan',
           body: data['description']?.toString() ?? '',
           level: data['level']?.toString() ?? 'tinggi',
@@ -260,13 +236,10 @@ class NotificationService {
       }
     });
 
-    // Step 2: Listen notif BARU yang masuk setelah app dibuka
+    // Step 2: Listen notif BARU
     return _notifRef.onChildAdded.listen((event) async {
       final key = event.snapshot.key ?? '';
-      if (key.isEmpty) return;
-
-      // Skip kalau sudah diproses di Step 1 (notif lama)
-      if (_processedKeys.contains(key)) return;
+      if (key.isEmpty || _processedKeys.contains(key)) return;
 
       final raw = event.snapshot.value;
       if (raw == null) return;
@@ -276,14 +249,14 @@ class NotificationService {
 
       debugPrint('[OneSignal] Notif baru diterima: $key');
 
-      final idSnap = await _db.ref('Walkers/$walkerId/oneSignalId').get();
-      if (!idSnap.exists || idSnap.value == null) {
-        debugPrint('[OneSignal] oneSignalId tidak ada');
+      final playerIds = await _getAllPlayerIds();
+      if (playerIds.isEmpty) {
+        debugPrint('[OneSignal] oneSignalIds tidak ada');
         return;
       }
 
       await sendOneSignalNotif(
-        playerId: idSnap.value.toString(),
+        playerIds: playerIds,
         title: data['title']?.toString() ?? 'Peringatan',
         body: data['description']?.toString() ?? '',
         level: data['level']?.toString() ?? 'tinggi',
@@ -295,7 +268,7 @@ class NotificationService {
           'level': data['level']?.toString() ?? 'tinggi',
         },
       );
-      debugPrint('[OneSignal] Push notif baru: $key');
+      debugPrint('[OneSignal] Push notif baru: $key ke ${playerIds.length} device');
     });
   }
 }

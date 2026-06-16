@@ -165,27 +165,60 @@ class HistoryService {
   ) {
     final merged = Map<dynamic, dynamic>.from(item);
 
-    // GPS connected
+    // statusSistem: model sudah handle via ssRaw, ctx tetap disediakan sebagai fallback
     merged['_ctx_gsmConnected'] = ctx['_ctx_gsmConnected'];
     merged['_ctx_gpsConnected'] = ctx['_ctx_gpsConnected'];
-    merged['_ctx_imuNormal'] = ctx['_ctx_imuNormal'];
+    merged['_ctx_imuNormal']    = ctx['_ctx_imuNormal'];
 
-    // lokasiKoordinat — pakai dari history dulu, fallback ctx
-    merged['_ctx_lokasiKoordinat'] ??= ctx['_ctx_lokasiKoordinat'];
+    // lokasiKoordinat — history node dulu
+    final coord = item['lokasiKoordinat']?.toString() ?? '';
+    if (coord.isNotEmpty && coord != '0.000000,0.000000' && coord != ',') {
+      merged['_ctx_lokasiKoordinat'] = coord;
+    } else {
+      merged['_ctx_lokasiKoordinat'] = ctx['_ctx_lokasiKoordinat'];
+    }
 
-    // kondisiGeofence
+    // kondisiGeofence — selalu dari parent (real-time geofence status)
     merged['_ctx_kondisiGeofence'] = ctx['_ctx_kondisiGeofence'];
-    merged['_ctx_jarakDariPusat'] ??= ctx['_ctx_jarakDariPusat'];
 
-    // sensor fallback
-    merged['_ctx_hcsrBack'] = ctx['_ctx_hcsrBack'];
-    merged['_ctx_hcsrFront'] = ctx['_ctx_hcsrFront'];
-    merged['_ctx_accel_x'] = ctx['_ctx_accel_x'];
-    merged['_ctx_accel_y'] = ctx['_ctx_accel_y'];
-    merged['_ctx_accel_z'] = ctx['_ctx_accel_z'];
-    merged['_ctx_gyro_x'] = ctx['_ctx_gyro_x'];
-    merged['_ctx_gyro_y'] = ctx['_ctx_gyro_y'];
-    merged['_ctx_gyro_z'] = ctx['_ctx_gyro_z'];
+    // lokasiJarakPusat — history node dulu
+    if (item['lokasiJarakPusat'] != null) {
+      final val = item['lokasiJarakPusat'];
+      final d = val is num ? val.toDouble() : double.tryParse(val.toString()) ?? 0.0;
+      merged['_ctx_jarakDariPusat'] = '${d.toStringAsFixed(1)} m';
+    } else {
+      merged['_ctx_jarakDariPusat'] = ctx['_ctx_jarakDariPusat'];
+    }
+
+    // distanceData — history node dulu (sudah ditulis Arduino)
+    final dist = item['distanceData'];
+    if (dist is Map && dist.isNotEmpty) {
+      // Sudah ada di history, model akan baca langsung dari raw['distanceData']
+      merged['_ctx_hcsrFront'] = dist['hcsr04_front'];
+      merged['_ctx_hcsrBack']  = dist['hcsr04_back'];
+    } else {
+      // Fallback: sensor live dari parent
+      merged['_ctx_hcsrFront'] = ctx['_ctx_hcsrFront'];
+      merged['_ctx_hcsrBack']  = ctx['_ctx_hcsrBack'];
+    }
+
+    // sensorData IMU — history node dulu (sudah ditulis Arduino)
+    final sd = item['sensorData'];
+    if (sd is Map && sd.isNotEmpty) {
+      merged['_ctx_accel_x'] = sd['accel_x'];
+      merged['_ctx_accel_y'] = sd['accel_y'];
+      merged['_ctx_accel_z'] = sd['accel_z'];
+      merged['_ctx_gyro_x']  = sd['gyro_x'];
+      merged['_ctx_gyro_y']  = sd['gyro_y'];
+      merged['_ctx_gyro_z']  = sd['gyro_z'];
+    } else {
+      merged['_ctx_accel_x'] = ctx['_ctx_accel_x'];
+      merged['_ctx_accel_y'] = ctx['_ctx_accel_y'];
+      merged['_ctx_accel_z'] = ctx['_ctx_accel_z'];
+      merged['_ctx_gyro_x']  = ctx['_ctx_gyro_x'];
+      merged['_ctx_gyro_y']  = ctx['_ctx_gyro_y'];
+      merged['_ctx_gyro_z']  = ctx['_ctx_gyro_z'];
+    }
 
     return merged;
   }

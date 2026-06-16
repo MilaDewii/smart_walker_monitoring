@@ -139,7 +139,23 @@ class HistoryItem {
 
     final catStr =
         (raw['category'] ?? raw['type'] ?? '').toString().toLowerCase();
-    final category = _parseCategory(catStr);
+    // Arduino tulis sensor: "HC-SR04 Belakang" atau "HC-SR04 Depan"
+    // Gunakan field sensor untuk bedakan hambatan depan vs belakang
+    final sensorField = (raw['sensor'] ?? '').toString().toLowerCase();
+    HistoryCategory category;
+    if (catStr == 'fall' || catStr.contains('jatuh')) {
+      category = HistoryCategory.jatuh;
+    } else if (catStr == 'geofence' || catStr.contains('geofence')) {
+      category = HistoryCategory.geofence;
+    } else if (sensorField.contains('belakang') || catStr.contains('belakang')) {
+      category = HistoryCategory.hambatanBelakang;
+    } else if (sensorField.contains('depan') || catStr.contains('depan')) {
+      category = HistoryCategory.hambatanDepan;
+    } else if (catStr.contains('aktivitas')) {
+      category = HistoryCategory.aktivitas;
+    } else {
+      category = HistoryCategory.sensor;
+    }
 
     final subtitle = (raw['subtitle'] ?? raw['subtittle'] ?? '').toString();
 
@@ -251,12 +267,24 @@ class HistoryItem {
     }
 
     // ── statusSistem — dari ctx (sim808 di parent walker) ──
-    final statusSistem = StatusSistem(
-      gsmConnected: raw['_ctx_gsmConnected'] == true,
-      gpsConnected: raw['_ctx_gpsConnected'] == true,
-      imuNormal: raw['_ctx_imuNormal'] != false,
-    );
-
+// ── statusSistem — history node dulu, fallback ctx ──────
+    final ssRaw = raw['statusSistem'];
+    final StatusSistem statusSistem;
+    if (ssRaw is Map) {
+      // Data dari Arduino langsung di history node
+      statusSistem = StatusSistem(
+        gsmConnected: ssRaw['gsmConnected'] == true,
+        gpsConnected: ssRaw['gpsConnected'] == true,
+        imuNormal:    ssRaw['imuNormal'] == true,
+      );
+    } else {
+      // Fallback: ambil dari parent walker via ctx
+      statusSistem = StatusSistem(
+        gsmConnected: raw['_ctx_gsmConnected'] == true,
+        gpsConnected: raw['_ctx_gpsConnected'] == true,
+        imuNormal:    raw['_ctx_imuNormal'] != false,
+      );
+    }
     // ── meta ──
     final meta = <String, String>{};
     if (hcsrJarak != null) meta['Jarak'] = '${hcsrJarak.toInt()} cm';
@@ -360,14 +388,15 @@ class HistoryItem {
   }
 
   static HistoryCategory _parseCategory(String s) {
-    if (s.contains('jatuh')) return HistoryCategory.jatuh;
-    if (s.contains('geofence')) return HistoryCategory.geofence;
-    if (s.contains('belakang') || s == 'fall')
-      return HistoryCategory.hambatanBelakang;
-    if (s.contains('depan') || s == 'obstacle')
-      return HistoryCategory.hambatanDepan;
+    // type dari Arduino: "sensor", "fall", "geofence"
+    // category dari Arduino: "sensor", "geofence"
+    if (s == 'fall' || s.contains('jatuh')) return HistoryCategory.jatuh;
+    if (s == 'geofence' || s.contains('geofence')) return HistoryCategory.geofence;
+    if (s.contains('belakang')) return HistoryCategory.hambatanBelakang;
+    if (s.contains('depan') || s == 'obstacle') return HistoryCategory.hambatanDepan;
     if (s.contains('aktivitas')) return HistoryCategory.aktivitas;
     if (s.contains('walker')) return HistoryCategory.walker;
+    // "sensor" dari Arduino → tentukan depan/belakang dari field sensor
     return HistoryCategory.sensor;
   }
 
