@@ -18,6 +18,7 @@ import 'screens/history_screen.dart';
 import 'screens/location_screen.dart';
 import 'screens/geofence_setup_screen.dart';
 import 'services/onesignal_handler.dart';
+import 'services/monitoring_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -62,6 +63,8 @@ Future<void> _startNotificationListener() async {
     }
 
     final service = NotificationService(walkerId: walkerId);
+
+    MonitoringService.instance.startEventMonitoring(walkerId);
 
     // Tunggu OneSignal Player ID tersedia (maks 10 detik)
     String? playerId;
@@ -112,7 +115,15 @@ class MyApp extends StatelessWidget {
         AppRoutes.connectWalker: (context) => const WalkerConnectScreen(),
         AppRoutes.location: (context) => const LocationScreen(),
         AppRoutes.geofenceSetup: (context) => const GeofenceSetupScreen(),
-        AppRoutes.history: (context) => const HistoryScreen(),
+        // KODE BARU
+        AppRoutes.history: (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          String? openHistoryId;
+          if (args is Map) {
+            openHistoryId = args['openHistoryId']?.toString();
+          }
+          return HistoryScreen(openHistoryId: openHistoryId);
+        },
       },
     );
   }

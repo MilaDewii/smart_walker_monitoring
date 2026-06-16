@@ -31,14 +31,14 @@ class WalkerConnectService {
       }
 
       // 2. (Opsional) cek status connected
-      final statusSnap = await _db.ref('Walkers/$walkerId/status/connected').get();
-      final isConnected = statusSnap.value == true;
-      if (!isConnected) {
-        return WalkerConnectResult(
-          success: false,
-          errorMessage: 'Walker ditemukan tapi sedang offline.',
-        );
-      }
+      // final statusSnap = await _db.ref('Walkers/$walkerId/status/connected').get();
+      // final isConnected = statusSnap.value == true;
+      // if (!isConnected) {
+      //   return WalkerConnectResult(
+      //     success: false,
+      //     errorMessage: 'Walker ditemukan tapi sedang offline.',
+      //   );
+      // }
 
       // 3. Cek apakah sudah pernah dipasangkan
       final existing = await DatabaseHelper.instance.getPairedWalkers();

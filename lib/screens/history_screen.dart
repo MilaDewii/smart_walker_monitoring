@@ -52,12 +52,14 @@ class _C {
 
 // ── Screen ────────────────────────────────────────────────────
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  final String? openHistoryId;
+  const HistoryScreen({super.key, this.openHistoryId});
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
+  bool _hasOpenedDetail = false;
   // ── State: nama lansia & walker ───────────────────────────
   String _namaLansia = 'Nama Lansia';
   String _namaUser = 'User';
@@ -66,9 +68,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   NotificationService? _notifService;
 
   late final HistoryService _service;
+  late Stream<List<HistoryItem>> _historyStream;
 
   String _selectedCategory = 'Semua';
   String _sortOption = 'Terbaru';
+  String _searchQuery = '';
 
   final List<Map<String, dynamic>> _tabs = [
     {'label': 'Semua', 'icon': Icons.history_rounded},
@@ -91,7 +95,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
       final walkerId = pairedWalkers.isNotEmpty
           ? pairedWalkers.first['walker_id']?.toString()
-          : 'walker_001';
+          : null; // ◄ null kalau belum pairing
 
       if (!mounted) return;
       setState(() {
@@ -107,8 +111,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
         }
       });
 
-      _service = HistoryService(walkerId: _walkerId ?? 'walker_001');
-      _notifService = NotificationService(walkerId: _walkerId ?? 'walker_001');
+      if (_walkerId == null) return; // ◄ stop kalau belum pairing
+      _service = HistoryService(walkerId: _walkerId!);
+      _historyStream = _service.historyStream();
+      _notifService = NotificationService(walkerId: _walkerId!);
     } catch (e) {
       if (!mounted) return;
       _service = HistoryService(walkerId: 'walker_001');
@@ -169,6 +175,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       });
     }
 
+    if (_searchQuery.isNotEmpty) {
+      list = list.where((item) {
+        return item.title.toLowerCase().contains(_searchQuery.toLowerCase());
+      }).toList();
+    }
+
     return list;
   }
 
@@ -206,7 +218,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 ),
                 child: StreamBuilder<List<HistoryItem>>(
-                  stream: _service.historyStream(),
+                  stream: _historyStream,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
@@ -238,6 +250,30 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     }
 
                     final allItems = snapshot.data ?? [];
+
+                    if (!_hasOpenedDetail &&
+                        widget.openHistoryId != null &&
+                        allItems.isNotEmpty) {
+                      final matched = allItems.where(
+                        (item) => item.id == widget.openHistoryId,
+                      );
+
+                      if (matched.isNotEmpty) {
+                        _hasOpenedDetail = true;
+
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          showModalBottomSheet(
+                            context: context,
+                            backgroundColor: Colors.transparent,
+                            isScrollControlled: true,
+                            useSafeArea: true,
+                            builder: (_) => _DetailSheet(
+                              item: matched.first,
+                            ),
+                          );
+                        });
+                      }
+                    }
                     final filtered = _applyFilter(allItems);
                     final groupedItems = _grouped(filtered);
 
@@ -248,6 +284,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _summaryRow(allItems.length),
+                          const SizedBox(height: 12),
+                          _searchBar(),
                           const SizedBox(height: 12),
                           _categoryTabs(),
                           const SizedBox(height: 14),
@@ -353,7 +391,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     color: _C.primary)),
             const Spacer(),
             PopupMenuButton<String>(
-              onSelected: (val) => setState(() => _sortOption = val),
+              onSelected: (val) async {
+                if (val == 'Clear All') {
+                  await _service.clearAllHistory();
+
+                  return;
+                }
+
+                setState(() {
+                  _sortOption = val;
+                });
+              },
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
               offset: const Offset(0, 36),
@@ -364,6 +412,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 _sortMenuItem('Bahaya', Icons.dangerous_outlined),
                 _sortMenuItem('Peringatan', Icons.warning_amber_rounded),
                 _sortMenuItem('Normal', Icons.check_circle_outline),
+                const PopupMenuDivider(),
+                _sortMenuItem('Clear All', Icons.delete_forever),
               ],
               child: Container(
                 padding:
@@ -384,6 +434,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ],
         ),
       );
+
+  Widget _searchBar() {
+    return TextField(
+      onChanged: (value) {
+        setState(() {
+          _searchQuery = value;
+        });
+      },
+      decoration: InputDecoration(
+        hintText: 'Cari riwayat...',
+        prefixIcon: const Icon(Icons.search),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
 
   PopupMenuItem<String> _sortMenuItem(String label, IconData icon) {
     final isActive = _sortOption == label;
@@ -467,7 +537,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 14, bottom: 8),
-            child: Text('Hari ini — $date',
+            child: Text(date,
                 style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -533,8 +603,35 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(item.time,
-                      style: const TextStyle(fontSize: 11, color: _C.textMid)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        item.time,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _C.textMid,
+                        ),
+                      ),
+                      PopupMenuButton(
+                        icon: const Icon(
+                          Icons.more_vert,
+                          size: 16,
+                        ),
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Hapus'),
+                          )
+                        ],
+                        onSelected: (value) async {
+                          if (value == 'delete') {
+                            await _service.deleteHistory(item.id);
+                          }
+                        },
+                      )
+                    ],
+                  )
                 ],
               ),
               if (item.meta.isNotEmpty) ...[
@@ -835,6 +932,16 @@ class _DetailSheet extends StatelessWidget {
         ? (jarak > threshold ? _C.bahayaText : _C.amanText)
         : (jarak < threshold ? _C.warnText : _C.amanText);
 
+// Override warna kalau status eksplisit dari Firebase
+    final String statusLower = (e.hcsrStatus ?? '').toLowerCase();
+    final Color finalStatusColor = statusLower.contains('tidak terdeteksi')
+        ? (item.status == HistoryStatus.bahaya ? _C.bahayaText : _C.warnText)
+        : statusLower.contains('terdeteksi') && !statusLower.contains('tidak')
+            ? _C.amanText
+            : statusLower.contains('hambatan')
+                ? _C.warnText
+                : statusColor;
+
     final String statusText = e.hcsrStatus ??
         (isBelakang
             ? (jarak > threshold ? 'Tidak Terdeteksi' : 'Terdeteksi')
@@ -851,7 +958,7 @@ class _DetailSheet extends StatelessWidget {
                 'Jarak Terukur', '${jarak.toStringAsFixed(0)} cm', _C.textDark),
             _sonarCol('Batas Aman', '≤ ${threshold.toStringAsFixed(0)} cm',
                 _C.warnText),
-            _sonarCol('Status', statusText, statusColor),
+            _sonarCol('Status', statusText, finalStatusColor),
           ]),
           if (isBelakang) ...[
             const SizedBox(height: 12),
@@ -891,13 +998,24 @@ class _DetailSheet extends StatelessWidget {
 
   Widget _sonarCol(String label, String value, Color color) => Expanded(
         child: Column(children: [
-          Text(value,
-              style: TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Text(
+            value,
+            style: TextStyle(
+                fontSize: 13, // ◄ kecilkan dari 16 → 13
+                fontWeight: FontWeight.bold,
+                color: color),
+            textAlign: TextAlign.center,
+            maxLines: 2, // ◄ max 2 baris
+            overflow: TextOverflow.ellipsis, // ◄ kalau masih panjang, ellipsis
+          ),
           const SizedBox(height: 2),
-          Text(label,
-              style: const TextStyle(fontSize: 10, color: _C.textMid),
-              textAlign: TextAlign.center),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10, color: _C.textMid),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ]),
       );
 
@@ -905,19 +1023,24 @@ class _DetailSheet extends StatelessWidget {
     final isBelakang = item.category == HistoryCategory.hambatanBelakang;
     return _card(
       title: 'Jarak Sensor (Belakang & Depan)',
-      child: SizedBox(
-        height: 150,
-        child: CustomPaint(
-          painter: _DistanceChartPainter(
-            data: item.extra.distanceData,
-            lineColor: isBelakang
-                ? (item.status == HistoryStatus.bahaya
-                    ? _C.bahayaText
-                    : _C.amanText)
-                : _C.warnText,
-            threshold: item.extra.hcsrThreshold ?? 60,
+      child: ClipRect(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4), // ◄ TAMBAH INI
+          child: SizedBox(
+            height: 160, // ◄ naikkan sedikit supaya grafik muat
+            child: CustomPaint(
+              painter: _DistanceChartPainter(
+                data: item.extra.distanceData,
+                lineColor: isBelakang
+                    ? (item.status == HistoryStatus.bahaya
+                        ? _C.bahayaText
+                        : _C.amanText)
+                    : _C.warnText,
+                threshold: item.extra.hcsrThreshold ?? 60,
+              ),
+              size: Size.infinite,
+            ),
           ),
-          size: Size.infinite,
         ),
       ),
     );
@@ -1323,7 +1446,7 @@ class _DistanceChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty) return;
-    const double padL = 44, padB = 22, padT = 10, padR = 10;
+    const double padL = 44, padB = 22, padT = 20, padR = 10;
     final w = size.width - padL - padR;
     final h = size.height - padT - padB;
     const double minVal = 0, maxVal = 120;
