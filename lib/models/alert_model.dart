@@ -54,7 +54,8 @@ class AlertItem {
   final String description;
   final double score;
   final int durasiDetik;
-  bool sudahDibaca;
+  bool sudahDibaca; // sudah dibuka/dilihat — otomatis saat tile diklik
+  bool sudahAman;   // user konfirmasi situasi aman — harus klik manual
   final LatLng location;
   final String timestamp;
   final String rawDate;
@@ -69,6 +70,7 @@ class AlertItem {
     required this.score,
     required this.durasiDetik,
     required this.sudahDibaca,
+    this.sudahAman = false,
     required this.location,
     required this.timestamp,
     required this.rawDate,
@@ -83,7 +85,6 @@ class AlertItem {
     final lat = _toDoubleStrict(data['latitude']) ?? 0.0;
     final lng = _toDoubleStrict(data['longitude']) ?? 0.0;
 
-    // ← FIX: pakai $key bukan $id (id belum terdefinisi di sini)
     if (lat == 0.0 && lng == 0.0) {
       debugPrint('[AlertItem] $key: lat/lng kosong, lokasi tidak tersedia');
     }
@@ -108,6 +109,7 @@ class AlertItem {
       score:       _toDoubleStrict(data['score']) ?? 0.0,
       durasiDetik: _toInt(data['durasiDetik']) ?? 0,
       sudahDibaca: data['sudahDibaca'] == true,
+      sudahAman:   data['sudahAman'] == true,   // ← field baru dari Firebase
       location:    LatLng(lat, lng),
       timestamp:   rawTs,
       rawDate:     rawDateOnly,
@@ -123,6 +125,7 @@ class AlertItem {
       'score':       score,
       'durasiDetik': durasiDetik,
       'sudahDibaca': sudahDibaca,
+      'sudahAman':   sudahAman,   // ← simpan ke Firebase
       'latitude':    location.latitude,
       'longitude':   location.longitude,
       'timestamp':   timestamp,
@@ -130,7 +133,7 @@ class AlertItem {
     };
   }
 
-  AlertItem copyWith({bool? sudahDibaca}) {
+  AlertItem copyWith({bool? sudahDibaca, bool? sudahAman}) {
     return AlertItem(
       id:          id,
       title:       title,
@@ -141,6 +144,7 @@ class AlertItem {
       score:       score,
       durasiDetik: durasiDetik,
       sudahDibaca: sudahDibaca ?? this.sudahDibaca,
+      sudahAman:   sudahAman   ?? this.sudahAman,   // ← ikut copyWith
       location:    location,
       timestamp:   timestamp,
       rawDate:     rawDate,
@@ -168,16 +172,24 @@ class AlertItem {
   }
 
   static String _parseTime(String rawTime, String rawTimestamp) {
+    // Coba parse dari field time dulu
     if (rawTime.isNotEmpty) {
       try {
+        // Handle format ISO: "22:04:31" atau "22:04"
         final parts = rawTime.split(':');
         if (parts.length >= 2) {
           return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')} WIB';
         }
       } catch (_) {}
     }
+    // Fallback: parse dari timestamp
+    // Handle format "2026-06-29 22:04:31" (spasi)
+    // Handle format "2026-06-29T22:04:31.650895" (ISO 8601 dengan T)
     try {
-      final segments = rawTimestamp.split(' ');
+      String tsPart = rawTimestamp;
+      // Ganti T dengan spasi agar konsisten
+      if (tsPart.contains('T')) tsPart = tsPart.replaceFirst('T', ' ');
+      final segments = tsPart.split(' ');
       if (segments.length >= 2) {
         final timeParts = segments[1].split(':');
         if (timeParts.length >= 2) {
@@ -194,8 +206,10 @@ class AlertItem {
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
     try {
-      final datePart = raw.split(' ').first;
-      final parts    = datePart.split('-');
+      // Ambil bagian tanggal saja (sebelum spasi atau T)
+      String datePart = raw.split(' ').first;
+      if (datePart.contains('T')) datePart = datePart.split('T').first;
+      final parts = datePart.split('-');
       if (parts.length >= 3) {
         final day   = parts[2].padLeft(2, '0');
         final month = int.parse(parts[1]);

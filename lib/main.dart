@@ -3,7 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'database/database_helper.dart';
-import 'services/notification_service.dart'; // ← TAMBAH
+import 'services/notification_service.dart';
 import 'utils/app_colors.dart';
 import 'utils/app_routes.dart';
 import 'screens/splash_screen.dart';
@@ -18,6 +18,8 @@ import 'screens/history_screen.dart';
 import 'screens/location_screen.dart';
 import 'screens/geofence_setup_screen.dart';
 import 'services/onesignal_handler.dart';
+import 'services/monitoring_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -27,19 +29,18 @@ Future<void> main() async {
   await Firebase.initializeApp();
   print('Firebase initialized successfully');
 
-  OneSignal.initialize("5b4eba8b-7292-4705-a67c-1810e621e035");
+  await dotenv.load(fileName: ".env");
+
+  OneSignal.initialize(
+    dotenv.env['ONESIGNAL_APP_ID']!,
+  );
   await OneSignal.Notifications.requestPermission(true);
 
-  // Pasang handler klik notif — cukup SEKALI
   setupOneSignalClickHandler(navigatorKey);
 
-  // Inisialisasi SQLite
   await DatabaseHelper.instance.database;
   await DatabaseHelper.instance.initializeSettings();
   await DatabaseHelper.instance.checkTables();
-
-  // ← TAMBAH: start listener push notif sejak app buka
-  await _startNotificationListener();
 
   FirebaseDatabase.instance.ref('.info/connected').onValue.listen((event) {
     final isConnected = event.snapshot.value == true;
@@ -47,10 +48,11 @@ Future<void> main() async {
   });
 
   runApp(const MyApp());
-  // ← HAPUS: setupOneSignalClickHandler yang duplikat di sini
+
+  // Dijalankan SETELAH runApp — tidak blocking UI
+  _startNotificationListener();
 }
 
-// ← TAMBAH fungsi ini
 Future<void> _startNotificationListener() async {
   try {
     final paired = await DatabaseHelper.instance.getLastPairedWalker();
@@ -62,6 +64,9 @@ Future<void> _startNotificationListener() async {
     }
 
     final service = NotificationService(walkerId: walkerId);
+    await service.cleanupInvalidIds();
+
+    MonitoringService.instance.startEventMonitoring(walkerId);
 
     // Tunggu OneSignal Player ID tersedia (maks 10 detik)
     String? playerId;
@@ -112,7 +117,14 @@ class MyApp extends StatelessWidget {
         AppRoutes.connectWalker: (context) => const WalkerConnectScreen(),
         AppRoutes.location: (context) => const LocationScreen(),
         AppRoutes.geofenceSetup: (context) => const GeofenceSetupScreen(),
-        AppRoutes.history: (context) => const HistoryScreen(),
+        AppRoutes.history: (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          String? openHistoryId;
+          if (args is Map) {
+            openHistoryId = args['openHistoryId']?.toString();
+          }
+          return HistoryScreen(openHistoryId: openHistoryId);
+        },
       },
     );
   }

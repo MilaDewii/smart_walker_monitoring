@@ -21,7 +21,6 @@ version: 1.0.0+1
 environment:
   sdk: ^3.5.3
 
-
 # analysis_options.yaml
 include: package:flutter_lints/flutter.yaml
 
@@ -29,7 +28,6 @@ linter:
   rules:
     - prefer_const_constructors
     - prefer_final_fields
-
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -60,6 +58,7 @@ dependencies:
   permission_handler: ^11.3.1
   onesignal_flutter: ^5.2.5
   http: ^1.2.0
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -101,6 +100,7 @@ flutter:
     - assets/images/logo_guardian.svg
     - assets/images/logo_guard.svg
     - assets/logo/logo.png
+    - .env
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

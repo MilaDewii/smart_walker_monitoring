@@ -204,24 +204,41 @@ class HistoryItem {
     }
 
     // ── HC-SR04 ──
-    final hcsrJarak =
-        raw['hcsrJarak'] != null ? _toDouble(raw['hcsrJarak'], 0) : null;
+    final hcsrJarakRaw = _toDouble(raw['hcsrJarak'], 0);
+    final hcsrJarak = hcsrJarakRaw > 0
+        ? hcsrJarakRaw
+        : frontVal != null && _toDouble(frontVal, 0) > 0
+            ? _toDouble(frontVal, 0)
+            : backVal != null && _toDouble(backVal, 0) > 0
+                ? _toDouble(backVal, 0)
+                : null;
     final hcsrThreshold = raw['hcsrThreshold'] != null
         ? _toDouble(raw['hcsrThreshold'], 30)
         : null;
     final hcsrStatus = raw['hcsrStatus']?.toString();
 
-    // ── lokasiJarakPusat — history dulu, fallback ctx ──
-    final jarakPusatRaw = raw['lokasiJarakPusat'] ?? raw['_ctx_jarakDariPusat'];
+    // Kalau lokasiJarakPusat = 0, pakai dari ctx
+    final jarakPusatHistory = raw['lokasiJarakPusat'];
+    final jarakPusatCtx = raw['_ctx_jarakDariPusat'];
+    final jarakPusatRaw = (jarakPusatHistory != null &&
+            jarakPusatHistory.toString() != '0' &&
+            jarakPusatHistory.toString() != '0.0')
+        ? jarakPusatHistory
+        : jarakPusatCtx;
     final lokasiJarakPusat = jarakPusatRaw != null
         ? (jarakPusatRaw is String && jarakPusatRaw.contains('m')
             ? jarakPusatRaw
             : '${_toDouble(jarakPusatRaw, 0).toStringAsFixed(1)} m')
         : null;
 
-    // ── lokasiKoordinat — history dulu, fallback ctx ──
-    final lokasiKoordinat = raw['lokasiKoordinat']?.toString() ??
-        raw['_ctx_lokasiKoordinat']?.toString();
+    // ── lokasiKoordinat — cek validitas, fallback ke ctx kalau 0,0 ──
+    final rawKoord = raw['lokasiKoordinat']?.toString();
+    final ctxKoord = raw['_ctx_lokasiKoordinat']?.toString();
+    final lokasiKoordinat = _isValidKoord(rawKoord)
+        ? rawKoord
+        : _isValidKoord(ctxKoord)
+            ? ctxKoord
+            : null;
 
     // ── kondisiGeofence — history dulu, fallback ctx ──
     final kondisiGeofence = raw['kondisiGeofence']?.toString() ??
@@ -244,9 +261,9 @@ class HistoryItem {
         statusDepan: frontVal != null && _toDouble(frontVal, 999) < threshold
             ? 'Ada Hambatan'
             : 'Aman',
-        statusBelakang: backVal != null && _toDouble(backVal, 0) > threshold
-            ? 'Tidak Terdeteksi'
-            : 'Terdeteksi',
+        statusBelakang: backVal != null && _toDouble(backVal, 999) < threshold
+            ? 'Terdeteksi'
+            : 'Tidak Terdeteksi',
         statusMpu: (raw['skorAnomali'] != null &&
                 _toDouble(raw['skorAnomali'], 0) > 0.5)
             ? 'Anomali'
@@ -266,32 +283,47 @@ class HistoryItem {
       tindakan.addAll(sorted.map((e) => e.value.toString()));
     }
 
-    // ── statusSistem — dari ctx (sim808 di parent walker) ──
-// ── statusSistem — history node dulu, fallback ctx ──────
-    final ssRaw = raw['statusSistem'];
-    final StatusSistem statusSistem;
-    if (ssRaw is Map) {
-      // Data dari Arduino langsung di history node
-      statusSistem = StatusSistem(
-        gsmConnected: ssRaw['gsmConnected'] == true,
-        gpsConnected: ssRaw['gpsConnected'] == true,
-        imuNormal:    ssRaw['imuNormal'] == true,
-      );
-    } else {
-      // Fallback: ambil dari parent walker via ctx
-      statusSistem = StatusSistem(
-        gsmConnected: raw['_ctx_gsmConnected'] == true,
-        gpsConnected: raw['_ctx_gpsConnected'] == true,
-        imuNormal:    raw['_ctx_imuNormal'] != false,
-      );
-    }
+    // ── statusSistem — baca dari field statusSistem di history dulu,
+// fallback ke ctx dari parent walker ──
+    final statusSistemRaw = raw['statusSistem'];
+    final statusSistemMap = statusSistemRaw is Map
+        ? Map<dynamic, dynamic>.from(statusSistemRaw)
+        : null;
+
+    final hasSystemData = statusSistemMap != null ||
+        raw['_ctx_gsmConnected'] != null ||
+        raw['_ctx_gpsConnected'] != null ||
+        raw['_ctx_imuNormal'] != null;
+
+    final statusSistem = hasSystemData
+        ? StatusSistem(
+            // Prioritas: statusSistem di history → ctx dari parent walker
+            gsmConnected: statusSistemMap != null
+                ? _toBool(statusSistemMap['gsmConnected'])
+                : _toBool(raw['_ctx_gsmConnected']),
+            gpsConnected: statusSistemMap != null
+                ? _toBool(statusSistemMap['gpsConnected'])
+                : _toBool(raw['_ctx_gpsConnected']),
+            imuNormal: statusSistemMap != null
+                ? _toBool(statusSistemMap['imuNormal'])
+                : _toBool(raw['_ctx_imuNormal']),
+          )
+        : null;
+
     // ── meta ──
     final meta = <String, String>{};
-    if (hcsrJarak != null) meta['Jarak'] = '${hcsrJarak.toInt()} cm';
-    if (raw['skorAnomali'] != null)
+
+    if (hcsrJarak != null) {
+      meta['Jarak'] = '${hcsrJarak.toInt()} cm';
+    }
+
+    if (raw['skorAnomali'] != null) {
       meta['Anomali'] = _toDouble(raw['skorAnomali'], 0).toStringAsFixed(2);
-    if (raw['lokasiNama'] != null)
+    }
+
+    if (raw['lokasiNama'] != null) {
       meta['Lokasi'] = raw['lokasiNama'].toString();
+    }
 
     final extra = HistoryExtra(
       jenisKejadian: raw['jenisKejadian']?.toString() ?? '-',
@@ -308,7 +340,10 @@ class HistoryItem {
       sensorData: sensorData,
       dataTerukur: dataTerukur,
       ringkasanSensor: ringkasan,
-      lokasiNama: raw['lokasiNama']?.toString(),
+      lokasiNama: (raw['lokasiNama']?.toString() == 'Unknown' ||
+              raw['lokasiNama']?.toString() == null)
+          ? (lokasiKoordinat != null ? 'Koordinat GPS' : null)
+          : raw['lokasiNama']?.toString(),
       lokasiKoordinat: lokasiKoordinat,
       lokasiJarakPusat: lokasiJarakPusat,
       kondisiGeofence: kondisiGeofence,
@@ -362,6 +397,9 @@ class HistoryItem {
       case 'hambatan_belakang':
         category = HistoryCategory.hambatanBelakang;
         break;
+      case 'walker':
+        category = HistoryCategory.walker;
+        break;
     }
 
     final createdAt = data['created_at']?.toString() ?? '';
@@ -388,15 +426,30 @@ class HistoryItem {
   }
 
   static HistoryCategory _parseCategory(String s) {
-    // type dari Arduino: "sensor", "fall", "geofence"
-    // category dari Arduino: "sensor", "geofence"
-    if (s == 'fall' || s.contains('jatuh')) return HistoryCategory.jatuh;
-    if (s == 'geofence' || s.contains('geofence')) return HistoryCategory.geofence;
-    if (s.contains('belakang')) return HistoryCategory.hambatanBelakang;
-    if (s.contains('depan') || s == 'obstacle') return HistoryCategory.hambatanDepan;
-    if (s.contains('aktivitas')) return HistoryCategory.aktivitas;
-    if (s.contains('walker')) return HistoryCategory.walker;
-    // "sensor" dari Arduino → tentukan depan/belakang dari field sensor
+    if (s.contains('jatuh') || s == 'fall') {
+      return HistoryCategory.jatuh;
+    }
+
+    if (s.contains('geofence')) {
+      return HistoryCategory.geofence;
+    }
+
+    if (s.contains('belakang')) {
+      return HistoryCategory.hambatanBelakang;
+    }
+
+    if (s.contains('depan') || s == 'obstacle') {
+      return HistoryCategory.hambatanDepan;
+    }
+
+    if (s.contains('aktivitas')) {
+      return HistoryCategory.aktivitas;
+    }
+
+    if (s.contains('walker')) {
+      return HistoryCategory.walker;
+    }
+
     return HistoryCategory.sensor;
   }
 
@@ -426,6 +479,31 @@ class HistoryItem {
     if (v is num) return v.toDouble();
     if (v is String) return double.tryParse(v) ?? fallback;
     return fallback;
+  }
+
+  static bool _isValidKoord(String? k) {
+    if (k == null || k.isEmpty) return false;
+    if (k == '0.000000,0.000000' || k == '0,0') return false;
+    if (k.startsWith('0.0000')) return false;
+    try {
+      final parts = k.split(',');
+      if (parts.length < 2) return false;
+      final lat = double.parse(parts[0].trim());
+      final lng = double.parse(parts[1].trim());
+      return lat != 0.0 || lng != 0.0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static bool _toBool(dynamic v) {
+    if (v is bool) return v;
+    if (v is String) {
+      final value = v.toLowerCase();
+      return value == 'true' || value == '1';
+    }
+    if (v is num) return v != 0;
+    return false;
   }
 
   static String _parseDate(String ts) {

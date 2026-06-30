@@ -165,17 +165,28 @@ class HistoryService {
   ) {
     final merged = Map<dynamic, dynamic>.from(item);
 
-    // statusSistem: model sudah handle via ssRaw, ctx tetap disediakan sebagai fallback
-    merged['_ctx_gsmConnected'] = ctx['_ctx_gsmConnected'];
-    merged['_ctx_gpsConnected'] = ctx['_ctx_gpsConnected'];
-    merged['_ctx_imuNormal']    = ctx['_ctx_imuNormal'];
+    // GPS connected
+    merged['_ctx_gsmConnected'] =
+        ctx['_ctx_gsmConnected'] ?? merged['_ctx_gsmConnected'];
+    merged['_ctx_gpsConnected'] =
+        ctx['_ctx_gpsConnected'] ?? merged['_ctx_gpsConnected'];
+    merged['_ctx_imuNormal'] =
+        ctx['_ctx_imuNormal'] ?? merged['_ctx_imuNormal'];
 
-    // lokasiKoordinat — history node dulu
-    final coord = item['lokasiKoordinat']?.toString() ?? '';
-    if (coord.isNotEmpty && coord != '0.000000,0.000000' && coord != ',') {
-      merged['_ctx_lokasiKoordinat'] = coord;
-    } else {
+    // lokasiKoordinat — pakai dari history dulu, fallback ctx
+// kalau history punya koordinat 0,0 (tidak valid), pakai dari ctx
+    final existingKoord = merged['_ctx_lokasiKoordinat']?.toString() ??
+        merged['lokasiKoordinat']?.toString();
+    final isKoordTidakValid = existingKoord == null ||
+        existingKoord.isEmpty ||
+        existingKoord == '0.000000,0.000000' ||
+        existingKoord == '0,0' ||
+        existingKoord.startsWith('0.0000');
+
+    if (isKoordTidakValid) {
       merged['_ctx_lokasiKoordinat'] = ctx['_ctx_lokasiKoordinat'];
+    } else {
+      merged['_ctx_lokasiKoordinat'] ??= ctx['_ctx_lokasiKoordinat'];
     }
 
     // kondisiGeofence — selalu dari parent (real-time geofence status)
@@ -231,4 +242,123 @@ class HistoryService {
     if (v is String) return double.tryParse(v) ?? fallback;
     return fallback;
   }
+
+  // ── Save history baru ke Firebase ─────────────────────────
+  Future<void> saveHistory({
+    required String eventType,
+    required String description,
+  }) async {
+    final ref = FirebaseDatabase.instance.ref('Walkers/$walkerId/history');
+
+    final snapshot = await ref.get();
+    final count = snapshot.exists && snapshot.value is Map
+        ? (snapshot.value as Map).length + 1
+        : 1;
+    final newKey = 'history_${count.toString().padLeft(3, '0')}';
+
+    final now = DateTime.now();
+    await ref.child(newKey).set({
+      'date': '${now.year}-${_pad(now.month)}-${_pad(now.day)}',
+      'time': '${_pad(now.hour)}:${_pad(now.minute)}:${_pad(now.second)}',
+      'event_type': eventType,
+      'description': description,
+      'lokasiKoordinat': null,
+    });
+  }
+
+  Future<void> deleteHistory(String historyId) async {
+    final ref =
+        FirebaseDatabase.instance.ref('Walkers/$walkerId/history/$historyId');
+
+    await ref.remove();
+  }
+
+  Future<void> clearAllHistory() async {
+    final ref = FirebaseDatabase.instance.ref('Walkers/$walkerId/history');
+
+    await ref.remove();
+  }
+
+// ── Cari history item berdasarkan timestamp + title ────────
+  Future<HistoryItem?> findByNotification({
+    required String timestamp,
+    required String title,
+  }) async {
+    try {
+      final items = await fetchOnce();
+      if (items.isEmpty) return null;
+
+      final dt = DateTime.tryParse(timestamp.replaceAll(' ', 'T'));
+      if (dt == null) return null;
+
+      const months = [
+        '',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'Mei',
+        'Jun',
+        'Jul',
+        'Ags',
+        'Sep',
+        'Okt',
+        'Nov',
+        'Des'
+      ];
+      final targetDate =
+          '${dt.day.toString().padLeft(2, '0')} ${months[dt.month]} ${dt.year}';
+
+      debugPrint(
+          '[HistoryService] Cari history: date=$targetDate title=$title');
+
+      // Coba exact match: tanggal + title sama
+      final exactMatch = items.where((i) {
+        final sameDate = i.date == targetDate;
+        final sameTitle = i.title.toLowerCase().contains(title.toLowerCase()) ||
+            title.toLowerCase().contains(i.title.toLowerCase());
+        return sameDate && sameTitle;
+      }).toList();
+
+      if (exactMatch.isNotEmpty) {
+        debugPrint('[HistoryService] Exact match: ${exactMatch.first.id}');
+        return exactMatch.first;
+      }
+
+      // Fallback: cari berdasarkan kategori yang relevan
+      final categoryMatch = items.where((i) {
+        final sameDate = i.date == targetDate;
+        final titleLower = title.toLowerCase();
+        final isHambatan = titleLower.contains('hambatan') &&
+            (i.category == HistoryCategory.hambatanDepan ||
+                i.category == HistoryCategory.hambatanBelakang);
+        final isJatuh =
+            titleLower.contains('jatuh') && i.category == HistoryCategory.jatuh;
+        final isGeofence = titleLower.contains('geofence') &&
+            i.category == HistoryCategory.geofence;
+        return sameDate && (isHambatan || isJatuh || isGeofence);
+      }).toList();
+
+      if (categoryMatch.isNotEmpty) {
+        debugPrint(
+            '[HistoryService] Category match: ${categoryMatch.first.id}');
+        return categoryMatch.first;
+      }
+
+      // Fallback terakhir: item terbaru di hari itu
+      final sameDay = items.where((i) => i.date == targetDate).toList();
+      if (sameDay.isNotEmpty) {
+        debugPrint('[HistoryService] Date-only match: ${sameDay.first.id}');
+        return sameDay.first;
+      }
+
+      debugPrint('[HistoryService] Tidak ada match sama sekali');
+      return null;
+    } catch (e) {
+      debugPrint('[HistoryService] findByNotification error: $e');
+      return null;
+    }
+  }
+
+  static String _pad(int n) => n.toString().padLeft(2, '0');
 }

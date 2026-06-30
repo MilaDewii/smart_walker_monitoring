@@ -1,18 +1,26 @@
-// lib/services/monitoring_service.dart
-// Fix:
-//  1. geofenceStatus dihitung dari Haversine, BUKAN dari geo['status'] RTD
-//  2. position diambil dari location/latitude & longitude (untuk marker lansia)
-//  3. lastUpdate dari location/last_update (bukan root)
-
 import 'package:firebase_database/firebase_database.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
 import '../models/walker_data.dart';
+import 'history_service.dart';
+import 'notification_service.dart';
+import '../models/alert_model.dart';
+import 'dart:async';
 
 class MonitoringService {
   MonitoringService._();
   static final MonitoringService instance = MonitoringService._();
 
+  bool _lastFallState       = false;
+  bool _lastWaspadaState    = false;
+  bool _lastGeofenceOutside = false;
+  bool _lastMendekatiState  = false;
+
+  StreamSubscription? _eventSub;
+
+  // =========================================================
+  // WATCH DATA REALTIME
+  // =========================================================
   Stream<WalkerData> watchWalker(String walkerId) {
     return FirebaseDatabase.instance
         .ref('Walkers/$walkerId')
@@ -25,110 +33,250 @@ class MonitoringService {
     });
   }
 
+  // =========================================================
+  // START MONITORING EVENT
+  // =========================================================
+  void startEventMonitoring(String walkerId) {
+    _eventSub?.cancel();
+    _eventSub = FirebaseDatabase.instance
+        .ref('Walkers/$walkerId')
+        .onValue
+        .listen((event) async {
+      if (event.snapshot.value == null) return;
+      final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+      final parsed = _parse(data);
+
+      await _handleFallDetection(parsed, walkerId);
+      await _handleGeofence(parsed, walkerId);
+    });
+  }
+
+  // =========================================================
+  // FALL DETECTION
+  // =========================================================
+  Future<void> _handleFallDetection(
+    WalkerData parsed,
+    String walkerId,
+  ) async {
+    // DARURAT: jatuh confirmed
+    if (parsed.jatuh && !_lastFallState) {
+      _lastFallState    = true;
+      _lastWaspadaState = false;
+
+      await HistoryService(walkerId: walkerId).saveHistory(
+        eventType:   'fall_detection',
+        description: 'Lansia terdeteksi jatuh',
+      );
+
+      await NotificationService(walkerId: walkerId).addNotification(
+        AlertItem(
+          id:          'notif_${DateTime.now().millisecondsSinceEpoch}',
+          title:       'Peringatan Jatuh',
+          level:       AlertLevel.darurat,
+          time:        '',
+          date:        '',
+          description: 'Lansia terdeteksi jatuh (risiko: ${parsed.riskPercent}%)',
+          score:       parsed.fallConfidence,
+          durasiDetik: 0,
+          sudahDibaca: false,
+          location:    parsed.position,
+          timestamp:   DateTime.now().toIso8601String(),
+          rawDate:     DateTime.now().toString(),
+        ),
+      );
+    }
+
+    // WASPADA: miring/mau jatuh (fuzzyRisk >= 0.30, belum jatuh)
+    final isWaspada = !parsed.jatuh && parsed.fuzzyRisk >= 0.30;
+    if (isWaspada && !_lastWaspadaState && !_lastFallState) {
+      _lastWaspadaState = true;
+
+      await NotificationService(walkerId: walkerId).addNotification(
+        AlertItem(
+          id:          'notif_${DateTime.now().millisecondsSinceEpoch}',
+          title:       'Gerakan Perlu Diperhatikan',
+          level:       AlertLevel.waspada,
+          time:        '',
+          date:        '',
+          description: 'Terdeteksi gerakan tidak normal (risiko: ${parsed.riskPercent}%)',
+          score:       parsed.fuzzyRisk,
+          durasiDetik: 0,
+          sudahDibaca: false,
+          location:    parsed.position,
+          timestamp:   DateTime.now().toIso8601String(),
+          rawDate:     DateTime.now().toString(),
+        ),
+      );
+    }
+
+    if (!parsed.jatuh) _lastFallState    = false;
+    if (!isWaspada)    _lastWaspadaState = false;
+  }
+
+  // =========================================================
+  // GEOFENCE
+  // =========================================================
+  Future<void> _handleGeofence(WalkerData parsed, String walkerId) async {
+    final isOutside   = parsed.geofenceStatus == 'outside';
+    final isMendekati = parsed.mendekatiGeofence;
+
+    // DARURAT: keluar geofence
+    if (isOutside && !_lastGeofenceOutside) {
+      _lastGeofenceOutside = true;
+      _lastMendekatiState  = false;
+
+      await HistoryService(walkerId: walkerId).saveHistory(
+        eventType:   'geofence',
+        description: 'Lansia keluar zona aman',
+      );
+
+      await NotificationService(walkerId: walkerId).addNotification(
+        AlertItem(
+          id:          'notif_${DateTime.now().millisecondsSinceEpoch}',
+          title:       'Keluar Area Aman',
+          level:       AlertLevel.darurat,
+          time:        '',
+          date:        '',
+          description: 'Lansia keluar area aman yang ditetapkan',
+          score:       0,
+          durasiDetik: 0,
+          sudahDibaca: false,
+          location:    parsed.position,
+          timestamp:   DateTime.now().toIso8601String(),
+          rawDate:     DateTime.now().toString(),
+        ),
+      );
+    }
+
+    // WASPADA: mendekati batas geofence (sisa <= 2m, masih inside)
+    if (isMendekati && !_lastMendekatiState && !isOutside) {
+      _lastMendekatiState = true;
+
+      final sisa = (parsed.geofenceRadius - parsed.jarakDariPusat)
+          .toStringAsFixed(1);
+
+      await NotificationService(walkerId: walkerId).addNotification(
+        AlertItem(
+          id:          'notif_${DateTime.now().millisecondsSinceEpoch}',
+          title:       'Mendekati Batas Area Aman',
+          level:       AlertLevel.waspada,
+          time:        '',
+          date:        '',
+          description: 'Lansia mendekati batas area aman, sisa $sisa m',
+          score:       0,
+          durasiDetik: 0,
+          sudahDibaca: false,
+          location:    parsed.position,
+          timestamp:   DateTime.now().toIso8601String(),
+          rawDate:     DateTime.now().toString(),
+        ),
+      );
+    }
+
+    if (!isOutside)   _lastGeofenceOutside = false;
+    if (!isMendekati) _lastMendekatiState  = false;
+  }
+
+  // =========================================================
+  // PARSE FIREBASE DATA
+  // =========================================================
   WalkerData _parse(Map<dynamic, dynamic> data) {
-    // ── fall_detection ─────────────────────────────────────────────────────
-    // Handle typo 'fall_detetction' dan nama benar 'fall_detection'
-    final fall       = _asMap(data['fall_detection'] ?? data['fall_detetction']);
-    final jatuh      = fall['fall_detected'] == true;
-    final confidence = _toDouble(fall['confidence'], 0);
-    final impact     = _toDouble(fall['impact_value'], 0);
 
-    // ── location ───────────────────────────────────────────────────────────
+    // fall_detetction (typo di ESP32)
+    final fall = _asMap(
+      data['fall_detetction'] ?? data['fall_detection'],
+    );
+
+    final jatuh      = fall['fall_detected'] == true || fall['jatuh'] == true;
+    final confidence = _toDouble(fall['confidence'],  0);
+    final impact     = _toDouble(fall['impact'],      0);
+    final fuzzyRisk  = _toDouble(fall['fuzzy_risk'],  0);
+    final gyroPeak   = _toDouble(fall['gyro_peak'],   0);
+    final azFiltered = _toDouble(fall['az_filtered'], 1.0);
+    final diamDetik  = _toDouble(fall['diam_detik'],  0);
+
+    // Status berdasarkan fuzzyRisk
+    final String status;
+    if (jatuh || fuzzyRisk >= 0.45) {
+      status = 'bahaya';
+    } else if (fuzzyRisk >= 0.30) {
+      status = 'waspada';
+    } else {
+      status = 'normal';
+    }
+
+    // Lokasi
     final loc        = _asMap(data['location']);
-    final lat        = _toDouble(loc['latitude'],  0.0);
-    final lng        = _toDouble(loc['longitude'], 0.0);
-    // Ambil lastUpdate dari location/last_update dulu, fallback ke status/last_update
-    final lastUpdate = loc['last_update']?.toString()
-                    ?? _asMap(data['status'])['last_update']?.toString()
-                    ?? data['last_update']?.toString()
-                    ?? '-';
+    final lat        = _toDouble(loc['latitude'],    0);
+    final lng        = _toDouble(loc['longitude'],   0);
+    final lastUpdate = loc['last_update']?.toString() ?? '-';
 
-    // ── geofence ───────────────────────────────────────────────────────────
+    // Geofence
     final geo    = _asMap(data['geofence']);
-    final geoLat = _toDouble(geo['center_latitude'],  0.0);
-    final geoLng = _toDouble(geo['center_longitude'], 0.0);
-    final radius = _toDouble(geo['radius'], 100);
+    final geoLat = _toDouble(geo['center_latitude'],  0);
+    final geoLng = _toDouble(geo['center_longitude'], 0);
+    final radius = _toDouble(geo['radius'],           100);
 
-    // ── Hitung geofenceStatus dari Haversine, BUKAN dari geo['status'] ────
-    // Ini penting supaya langsung update saat geofence diubah di app
-    // tanpa harus menunggu ESP update field 'status' di RTD
-    final bool isInSafeZone;
-    if (lat == 0.0 && lng == 0.0) {
-      // GPS belum fix → anggap aman supaya tidak false alarm
-      isInSafeZone = true;
-    } else if (geoLat == 0.0 && geoLng == 0.0) {
-      // Geofence belum diatur
-      isInSafeZone = true;
-    } else {
-      final dist = _haversine(lat, lng, geoLat, geoLng);
-      isInSafeZone = dist <= radius;
-    }
-    final geoStatus = isInSafeZone ? 'inside' : 'outside';
+    // Hitung jarak dari pusat geofence
+    final jarakDariPusat = (lat == 0 || lng == 0 || geoLat == 0 || geoLng == 0)
+        ? 0.0
+        : _haversine(lat, lng, geoLat, geoLng);
 
-    // ── sensors ────────────────────────────────────────────────────────────
-    final sensors    = _asMap(data['sensors']);
-    final mpuAktif   = sensors['mpu6050']      is Map;
-    final ultraFront = sensors['hcsr04_front'] is Map;
-    final ultraBack  = sensors['hcsr04_back']  is Map;
+    final isInSafeZone = (lat == 0 || lng == 0 || geoLat == 0 || geoLng == 0)
+        ? true
+        : jarakDariPusat <= radius;
 
-    // GPS aktif — cek dari sim808 atau sensors
-    final sim808   = _asMap(data['sim808']);
+    // Sensors
+    final sensors  = _asMap(data['sensors']);
+    final sim808   = _asMap(sensors['sim808']);
     final gpsAktif = sim808['gps_status'] == true
-                  || sensors['gps_active'] == true;
+        || sensors['gps_active'] == true;
 
-    // ── status walker ──────────────────────────────────────────────────────
-    final statusNode   = _asMap(data['status']);
-    final walkerActive = statusNode['walker_active'] == true
-                      || statusNode['connected'] == true
-                      || data['walker_active'] == true;
-
-    // ── Tentukan status string ─────────────────────────────────────────────
-    final String statusStr;
-    if (jatuh || !isInSafeZone) {
-      statusStr = 'bahaya';
-    } else if (confidence >= 0.4) {
-      statusStr = 'peringatan';
-    } else {
-      final rawStatus = statusNode['geofance_status']?.toString()
-                     ?? data['status']?.toString()
-                     ?? 'normal';
-      if (rawStatus == 'danger'  || rawStatus == 'bahaya')    statusStr = 'bahaya';
-      else if (rawStatus == 'warning' || rawStatus == 'peringatan') statusStr = 'peringatan';
-      else statusStr = 'normal';
-    }
-
-    // ── activity ───────────────────────────────────────────────────────────
+    // Langkah
     final activity = _asMap(data['activity']);
     final langkah  = _toInt(activity['langkah'], 0)
                    + _toInt(activity['steps'],   0);
 
+    // ultrasonicBack: true jika user_detected = true
+    final hcsrBack     = _asMap(sensors['hcsr04_back']);
+    final hcsrFront    = _asMap(sensors['hcsr04_front']);
+    final ultraBack    = hcsrBack['user_detected']      == true;
+    final ultraFront   = hcsrFront['obstacle_detected'] == true;
+
     return WalkerData(
-      position       : LatLng(lat, lng),
-      jatuh          : jatuh,
-      fallConfidence : confidence,
-      fallImpact     : impact,
-      gpsAktif       : gpsAktif,
-      mpuAktif       : mpuAktif,
+      position:        LatLng(lat, lng),
+      jatuh:           jatuh,
+      fallConfidence:  confidence,
+      fallImpact:      impact,
+      fuzzyRisk:       fuzzyRisk,
+      gyroPeak:        gyroPeak,
+      azFiltered:      azFiltered,
+      diamDetik:       diamDetik,
+      gpsAktif:        gpsAktif,
+      mpuAktif:        sensors['mpu_active'] == true,
       ultrasonicFront: ultraFront,
-      ultrasonicBack : ultraBack,
-      walkerActive   : walkerActive,
-      status         : statusStr,
-      geofenceStatus : geoStatus,   // ← dari Haversine, bukan RTD field
-      geofenceRadius : radius,
-      geofenceCenter : LatLng(geoLat, geoLng),
-      lastUpdate     : lastUpdate,
-      langkah        : langkah,
+      ultrasonicBack:  ultraBack,
+      walkerActive:    data['walker_active'] == true,
+      status:          status,
+      geofenceStatus:  isInSafeZone ? 'inside' : 'outside',
+      geofenceRadius:  radius,
+      geofenceCenter:  LatLng(geoLat, geoLng),
+      jarakDariPusat:  jarakDariPusat,
+      lastUpdate:      lastUpdate,
+      langkah:         langkah,
     );
   }
 
-  // ── Haversine distance dalam meter ────────────────────────────────────────
-  double _haversine(double lat1, double lng1, double lat2, double lng2) {
+  // =========================================================
+  // HELPERS
+  // =========================================================
+  double _haversine(double lat1, double lon1, double lat2, double lon2) {
     const r    = 6371000.0;
     final dLat = _rad(lat2 - lat1);
-    final dLng = _rad(lng2 - lng1);
+    final dLon = _rad(lon2 - lon1);
     final a    = math.pow(math.sin(dLat / 2), 2) +
-        math.cos(_rad(lat1)) * math.cos(_rad(lat2)) *
-        math.pow(math.sin(dLng / 2), 2);
+                 math.cos(_rad(lat1)) * math.cos(_rad(lat2)) *
+                 math.pow(math.sin(dLon / 2), 2);
     return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
@@ -137,15 +285,17 @@ class MonitoringService {
   Map<dynamic, dynamic> _asMap(dynamic v) =>
       v is Map ? Map<dynamic, dynamic>.from(v) : {};
 
-  double _toDouble(dynamic v, double fb) {
+  double _toDouble(dynamic v, double fallback) {
     if (v is num)    return v.toDouble();
-    if (v is String) return double.tryParse(v) ?? fb;
-    return fb;
+    if (v is String) return double.tryParse(v) ?? fallback;
+    return fallback;
   }
 
-  int _toInt(dynamic v, int fb) {
+  int _toInt(dynamic v, int fallback) {
     if (v is num)    return v.toInt();
-    if (v is String) return int.tryParse(v) ?? fb;
-    return fb;
+    if (v is String) return int.tryParse(v) ?? fallback;
+    return fallback;
   }
+
+  void stopMonitoring() => _eventSub?.cancel();
 }

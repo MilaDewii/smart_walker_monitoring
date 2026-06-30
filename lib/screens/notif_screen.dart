@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-// import 'package:latlong2/latlong.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../database/database_helper.dart';
 import '../models/alert_model.dart';
 import '../services/notification_service.dart';
+import '../services/history_service.dart';
+import '../models/history_model.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
 
@@ -15,20 +16,22 @@ import '../utils/app_routes.dart';
 // COLORS
 // ============================================================
 class _C {
-  static const Color primary = AppColors.primary;
+  static const Color primary      = AppColors.primary;
   static const Color primaryLight = Color(0xFFDBEAFE);
-  static const Color bgPage = Color(0xFFE8F0FB);
-  static const Color white = AppColors.white;
-  static const Color textDark = AppColors.textDark;
-  static const Color textMid = AppColors.textGrey;
+  static const Color bgPage       = Color(0xFFE8F0FB);
+  static const Color white        = AppColors.white;
+  static const Color textDark     = AppColors.textDark;
+  static const Color textMid      = AppColors.textGrey;
 
-  static const Color tinggiText = AppColors.statusRed;
-  static const Color tinggiBg = Color(0xFFFEE2E2);
-  static const Color daruratText = AppColors.statusYellow;
-  static const Color daruratBg = Color(0xFFFFF3CD);
-  static const Color waspadaText = Color.fromARGB(255, 245, 158, 11);
-  static const Color waspadaBg = Color(0xFFFFF3CD);
-  static const Color unreadDot = AppColors.statusRed;
+  static const Color tinggiText  = AppColors.statusRed;
+  static const Color tinggiBg    = Color(0xFFFEE2E2);
+  static const Color daruratText = Color.fromARGB(255, 222, 3, 3);
+  static const Color daruratBg   = Color(0xFFFEE2E2);
+  static const Color waspadaText = Color(0xFFD97706);
+  static const Color waspadaBg   = Color(0xFFFFF3CD);
+  static const Color amanText    = Color(0xFF16A34A);
+  static const Color amanBg      = Color(0xFFDCFCE7);
+  static const Color unreadDot   = AppColors.statusRed;
 }
 
 // ============================================================
@@ -42,20 +45,20 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  String _namaUser = 'User';
-  String _namaLansia = 'Nama Lansia';
+  String _namaUser    = 'User';
+  String _namaLansia  = 'Nama Lansia';
   String _namaLengkap = 'User';
-  File? _fotoFile;
+  File?  _fotoFile;
   String? _walkerId;
   NotificationService? _service;
 
   StreamSubscription<List<AlertItem>>? _walkerSub;
   List<AlertItem> _alerts = [];
 
-  bool _isLoading = true;
-  String _errorMsg = '';
-  String _selectedFilter = 'Semua';
-  final List<String> _filters = ['Semua', 'Tinggi', 'Darurat', 'Waspada'];
+  bool   _isLoading        = true;
+  String _errorMsg         = '';
+  String _selectedFilter   = 'Semua';
+  final List<String> _filters = ['Semua', 'Darurat', 'Waspada'];
 
   String _selectedDateFilter = 'Hari ini';
   final List<String> _dateFilters = ['Hari ini', 'Semua Tanggal'];
@@ -80,7 +83,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Future<void> _loadProfileAndSubscribe() async {
     try {
       final profile = await DatabaseHelper.instance.getProfile();
-      final paired = await DatabaseHelper.instance.getLastPairedWalker();
+      final paired  = await DatabaseHelper.instance.getLastPairedWalker();
       final walkerId = paired?['walker_id']?.toString();
 
       if (!mounted) return;
@@ -92,17 +95,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
       }
 
       setState(() {
-        _namaUser = profile?['nama']?.toString() ?? 'User';
+        _namaUser    = profile?['nama']?.toString() ?? 'User';
         _namaLengkap = profile?['nama']?.toString() ?? 'User';
-        _namaLansia = profile?['nama_lansia']?.toString() ?? _namaLansia;
-        _fotoFile = fotoFile;
-        _walkerId = walkerId;
+        _namaLansia  = profile?['nama_lansia']?.toString() ?? _namaLansia;
+        _fotoFile    = fotoFile;
+        _walkerId    = walkerId;
       });
 
       if (walkerId == null || walkerId.isEmpty) {
         setState(() {
           _isLoading = false;
-          _errorMsg = 'Belum ada walker yang dipasangkan.';
+          _errorMsg  = 'Belum ada walker yang dipasangkan.';
         });
         return;
       }
@@ -135,9 +138,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
 
     if (_selectedDateFilter == 'Hari ini') {
-      final now = DateTime.now();
-      final todayStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final now      = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
       list = list.where((a) => a.rawDate == todayStr);
     }
 
@@ -158,25 +160,55 @@ class _NotificationScreenState extends State<NotificationScreen> {
     await _service!.markAllAsRead(_alerts);
   }
 
+  // ── Buka detail: hanya tandai sudahDibaca (titik merah hilang)
+  //    TIDAK otomatis tandai aman — user harus klik sendiri
   Future<void> _openDetail(AlertItem item) async {
-    await _service?.markAsRead(item.id);
+    // Tandai sudah dibaca → titik merah hilang
+    if (!item.sudahDibaca) {
+      await _service?.markAsRead(item.id);
+    }
+
+    if (!mounted) return;
+
+    // Cari history yang relevan
+    HistoryItem? historyItem;
+    if (_walkerId != null) {
+      try {
+        final historyService = HistoryService(walkerId: _walkerId!);
+        historyItem = await historyService.findByNotification(
+          timestamp: item.timestamp,
+          title: item.title,
+        );
+        debugPrint('[NotifScreen] historyItem id: ${historyItem?.id}');
+      } catch (e) {
+        debugPrint('[NotifScreen] gagal cari historyItem: $e');
+      }
+    }
+
     if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => NotificationDetailScreen(
+          // Kirim item dengan sudahDibaca=true tapi sudahAman tetap aslinya
           item: item.copyWith(sudahDibaca: true),
-          namaLansia: _namaLansia,
+          namaLansia:  _namaLansia,
           namaLengkap: _namaLengkap,
-          fotoFile: _fotoFile,
-          service: _service!,
+          fotoFile:    _fotoFile,
+          service:     _service!,
+          historyItem: historyItem,
         ),
       ),
     );
   }
 
-  int get _totalToday => _alerts.length;
-  int get _daruratToday => _alerts.where((a) => a.level == AlertLevel.darurat).length;
+  int get _totalToday {
+    final now      = DateTime.now();
+    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    return _alerts.where((a) => a.rawDate == todayStr).length;
+  }
+
+  int get _daruratToday     => _alerts.where((a) => a.level == AlertLevel.darurat).length;
   int get _belumDibacaToday => _alerts.where((a) => !a.sudahDibaca).length;
 
   @override
@@ -233,7 +265,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 child: _fotoFile == null
                     ? Text(
                         _namaLengkap.isNotEmpty ? _namaLengkap[0].toUpperCase() : '?',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary),
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary),
                       )
                     : null,
               ),
@@ -244,23 +277,27 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   Text('Halo, $_namaLengkap',
                       style: const TextStyle(fontSize: 12, color: _C.textMid)),
                   Text('Monitoring $_namaLansia',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _C.textDark)),
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold, color: _C.textDark)),
                 ],
               ),
               const Spacer(),
               if (_walkerId != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: _C.primaryLight, borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(
+                      color: _C.primaryLight, borderRadius: BorderRadius.circular(8)),
                   child: Text(_walkerId!,
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _C.primary)),
+                      style: const TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w600, color: _C.primary)),
                 ),
             ],
           ),
           const SizedBox(height: 12),
           Container(
             height: 44,
-            decoration: BoxDecoration(color: _C.white, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+                color: _C.white, borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 const SizedBox(width: 12),
@@ -281,7 +318,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 if (_searchQuery.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.clear, color: _C.textMid),
-                    onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); },
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
                   ),
               ],
             ),
@@ -297,7 +337,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -312,7 +357,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
           if (filtered.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
-              child: Center(child: Text('Tidak ada peringatan', style: TextStyle(color: _C.textMid, fontSize: 13))),
+              child: Center(
+                  child: Text('Tidak ada peringatan',
+                      style: TextStyle(color: _C.textMid, fontSize: 13))),
             )
           else
             ...filtered.map((a) => _buildAlertTile(a)),
@@ -335,21 +382,32 @@ class _NotificationScreenState extends State<NotificationScreen> {
             onTap: () => Navigator.maybePop(context),
             child: Container(
               width: 32, height: 32,
-              decoration: BoxDecoration(color: AppColors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(
+                  color: AppColors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8)),
               child: const Icon(Icons.chevron_left, color: AppColors.white, size: 22),
             ),
           ),
           const SizedBox(width: 10),
-          const Text('Notifikasi', style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+          const Text('Notifikasi',
+              style: TextStyle(
+                  color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w600)),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: AppColors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
+            decoration: BoxDecoration(
+                color: AppColors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(6)),
             child: Row(
               children: [
-                Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF4ADE80), shape: BoxShape.circle)),
+                Container(
+                    width: 6, height: 6,
+                    decoration: const BoxDecoration(
+                        color: Color(0xFF4ADE80), shape: BoxShape.circle)),
                 const SizedBox(width: 4),
-                const Text('Live', style: TextStyle(color: AppColors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                const Text('Live',
+                    style: TextStyle(
+                        color: AppColors.white, fontSize: 10, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -363,17 +421,42 @@ class _NotificationScreenState extends State<NotificationScreen> {
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
       child: Row(
         children: [
-          _buildSummaryChip(count: _totalToday, label: 'Total Peringatan', sub: 'Semua', bg: const Color(0xFFFEE2E2), iconColor: _C.tinggiText, icon: Icons.warning_amber_rounded),
+          _buildSummaryChip(
+              count: _totalToday,
+              label: 'Total Peringatan',
+              sub: 'Semua',
+              bg: const Color(0xFFFFF3CD),
+              iconColor: _C.waspadaText,
+              icon: Icons.warning_amber_rounded),
           const SizedBox(width: 8),
-          _buildSummaryChip(count: _daruratToday, label: 'Darurat', sub: 'Perlu tindakan', bg: const Color(0xFFFFF3CD), iconColor: _C.daruratText, icon: Icons.local_fire_department_rounded),
+          _buildSummaryChip(
+              count: _daruratToday,
+              label: 'Darurat',
+              sub: 'Perlu tindakan',
+              bg: const Color(0xFFFEE2E2),
+              iconColor: _C.daruratText,
+              icon: Icons.local_fire_department_rounded),
           const SizedBox(width: 8),
-          _buildSummaryChip(count: _belumDibacaToday, label: 'Belum Dibaca', sub: 'Butuh respon', bg: const Color(0xFFE0F2FE), iconColor: _C.primary, icon: Icons.mark_email_unread_rounded),
+          _buildSummaryChip(
+              count: _belumDibacaToday,
+              label: 'Belum Dibaca',
+              sub: 'Butuh respon',
+              bg: const Color(0xFFE0F2FE),
+              iconColor: _C.primary,
+              icon: Icons.mark_email_unread_rounded),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryChip({required int count, required String label, required String sub, required Color bg, required Color iconColor, required IconData icon}) {
+  Widget _buildSummaryChip({
+    required int count,
+    required String label,
+    required String sub,
+    required Color bg,
+    required Color iconColor,
+    required IconData icon,
+  }) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(10),
@@ -384,10 +467,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
             Row(children: [
               Icon(icon, size: 14, color: iconColor),
               const SizedBox(width: 4),
-              Text('$count', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: iconColor)),
+              Text('$count',
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold, color: iconColor)),
             ]),
             const SizedBox(height: 2),
-            Text(label, style: const TextStyle(fontSize: 10, color: _C.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(label,
+                style: const TextStyle(fontSize: 10, color: _C.textDark),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
             Text(sub, style: const TextStyle(fontSize: 9, color: _C.textMid)),
           ],
         ),
@@ -424,7 +512,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
           color: active ? _C.primary : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: active ? AppColors.white : _C.textMid)),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: active ? AppColors.white : _C.textMid)),
       ),
     );
   }
@@ -432,19 +524,31 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Widget _buildDateDropdown() {
     return GestureDetector(
       onTap: () async {
-        final RenderBox box = _dateDropdownKey.currentContext!.findRenderObject() as RenderBox;
+        final RenderBox box =
+            _dateDropdownKey.currentContext!.findRenderObject() as RenderBox;
         final Offset offset = box.localToGlobal(Offset.zero);
         final Size size = box.size;
         final result = await showMenu<String>(
           context: context,
-          position: RelativeRect.fromLTRB(offset.dx, offset.dy + size.height + 4, offset.dx + size.width, 0),
+          position: RelativeRect.fromLTRB(
+              offset.dx, offset.dy + size.height + 4, offset.dx + size.width, 0),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           elevation: 4,
-          items: _dateFilters.map((d) => PopupMenuItem<String>(
-            value: d,
-            height: 36,
-            child: Text(d, style: TextStyle(fontSize: 12, fontWeight: d == _selectedDateFilter ? FontWeight.w700 : FontWeight.normal, color: d == _selectedDateFilter ? _C.primary : _C.textDark)),
-          )).toList(),
+          items: _dateFilters
+              .map((d) => PopupMenuItem<String>(
+                    value: d,
+                    height: 36,
+                    child: Text(d,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: d == _selectedDateFilter
+                                ? FontWeight.w700
+                                : FontWeight.normal,
+                            color: d == _selectedDateFilter
+                                ? _C.primary
+                                : _C.textDark)),
+                  ))
+              .toList(),
         );
         if (result != null) setState(() => _selectedDateFilter = result);
       },
@@ -452,18 +556,33 @@ class _NotificationScreenState extends State<NotificationScreen> {
         key: _dateDropdownKey,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          border: Border.all(color: _selectedDateFilter == 'Hari ini' ? _C.primary : const Color(0xFFE2E8F0)),
+          border: Border.all(
+              color: _selectedDateFilter == 'Hari ini'
+                  ? _C.primary
+                  : const Color(0xFFE2E8F0)),
           borderRadius: BorderRadius.circular(8),
-          color: _selectedDateFilter == 'Hari ini' ? _C.primaryLight : Colors.transparent,
+          color: _selectedDateFilter == 'Hari ini'
+              ? _C.primaryLight
+              : Colors.transparent,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.calendar_today_rounded, size: 12, color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
+            Icon(Icons.calendar_today_rounded,
+                size: 12,
+                color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
             const SizedBox(width: 4),
-            Text(_selectedDateFilter, style: TextStyle(fontSize: 11, color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid, fontWeight: _selectedDateFilter == 'Hari ini' ? FontWeight.w600 : FontWeight.normal)),
+            Text(_selectedDateFilter,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid,
+                    fontWeight: _selectedDateFilter == 'Hari ini'
+                        ? FontWeight.w600
+                        : FontWeight.normal)),
             const SizedBox(width: 2),
-            Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                size: 14,
+                color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
           ],
         ),
       ),
@@ -478,14 +597,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
           const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Daftar Peringatan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _C.textDark)),
-              Text('Terbaru Di atas', style: TextStyle(fontSize: 10, color: _C.textMid)),
+              Text('Daftar Peringatan',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 13, color: _C.textDark)),
+              Text('Terbaru Di atas',
+                  style: TextStyle(fontSize: 10, color: _C.textMid)),
             ],
           ),
           const Spacer(),
           GestureDetector(
             onTap: _markAllRead,
-            child: const Text('Tandai Semua Dibaca', style: TextStyle(fontSize: 10, color: _C.primary, fontWeight: FontWeight.w600)),
+            child: const Text('Tandai Semua Dibaca',
+                style: TextStyle(
+                    fontSize: 10, color: _C.primary, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -511,27 +635,54 @@ class _NotificationScreenState extends State<NotificationScreen> {
               children: [
                 Container(
                   width: 34, height: 34,
-                  decoration: BoxDecoration(color: ld['bg'] as Color, borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(
+                      color: ld['bg'] as Color,
+                      borderRadius: BorderRadius.circular(10)),
                   child: Icon(item.icon, size: 18, color: ld['text'] as Color),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: Text(item.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _C.textDark))),
+                Expanded(
+                    child: Text(item.title,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: _C.textDark))),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: ld['badgeBg'] as Color, borderRadius: BorderRadius.circular(6)),
-                  child: Text(ld['label'] as String, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: ld['text'] as Color)),
+                  decoration: BoxDecoration(
+                      color: ld['badgeBg'] as Color,
+                      borderRadius: BorderRadius.circular(6)),
+                  child: Text(ld['label'] as String,
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: ld['text'] as Color)),
                 ),
                 const SizedBox(width: 6),
-                Text(item.time.split(' ').first, style: const TextStyle(fontSize: 10, color: _C.textMid)),
+                // ── FIX: tampilkan jam saja (HH:mm) di tile
+                // item.time sudah diformat "HH:mm WIB" oleh _parseTime
+                // ambil bagian sebelum " WIB" agar ringkas
+                Text(
+                  item.time.contains(' ')
+                      ? item.time.split(' ').first  // "22:04"
+                      : item.time,
+                  style: const TextStyle(fontSize: 10, color: _C.textMid),
+                ),
                 const SizedBox(width: 4),
+                // Titik merah = belum dibaca (sudahDibaca)
                 Container(
                   width: 7, height: 7,
-                  decoration: BoxDecoration(color: item.sudahDibaca ? Colors.transparent : _C.unreadDot, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                      color: item.sudahDibaca ? Colors.transparent : _C.unreadDot,
+                      shape: BoxShape.circle),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            Text(item.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: _C.textDark)),
+            Text(item.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: _C.textDark)),
             const SizedBox(height: 10),
             _buildTileActionButtons(item),
           ],
@@ -540,9 +691,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  // Tombol aksi di tile list — lebih ringkas
+  // ── Tombol aksi di tile
   Widget _buildTileActionButtons(AlertItem item) {
-    final bool sudahAman = item.sudahDibaca;
+    // ── FIX: tombol "Tandai Aman" pakai sudahAman, BUKAN sudahDibaca
+    final bool sudahAman = item.sudahAman;
     return Row(
       children: [
         _actionBtn(
@@ -554,12 +706,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
         const SizedBox(width: 6),
         _actionBtn(
-          icon: sudahAman ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
+          icon: sudahAman
+              ? Icons.check_circle_rounded
+              : Icons.check_circle_outline_rounded,
           label: sudahAman ? 'Aman' : 'Tandai Aman',
-          color: _C.waspadaText,
-          bg: _C.waspadaBg,
+          color: _C.amanText,
+          bg: _C.amanBg,
           onTap: () async {
-            if (!sudahAman) await _service?.markAsRead(item.id);
+            // ── FIX: panggil markAsSafe, bukan markAsRead
+            if (!sudahAman) await _service?.markAsSafe(item.id);
           },
         ),
         const Spacer(),
@@ -567,13 +722,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
           onTap: () => _openDetail(item),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: _C.primary, borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+                color: _C.primary, borderRadius: BorderRadius.circular(8)),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Lihat Detail', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.white)),
+                Text('Lihat Detail',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.white)),
                 SizedBox(width: 4),
-                
                 Icon(Icons.chevron_right, size: 14, color: AppColors.white),
               ],
             ),
@@ -583,25 +742,35 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  Widget _actionBtn({required IconData icon, required String label, required Color color, required Color bg, required VoidCallback onTap}) {
+  Widget _actionBtn({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Color bg,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withOpacity(0.3))),
+        decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withOpacity(0.3))),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w600, color: color)),
           ],
         ),
       ),
     );
   }
 
-  // ── Bottom sheet pilih kontak ─────────────────────────────
   void _showContactPicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -613,17 +782,32 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Map<String, dynamic> _levelData(AlertLevel level) {
     switch (level) {
       case AlertLevel.tinggi:
-        return {'label': 'Tinggi', 'text': _C.tinggiText, 'bg': _C.tinggiBg, 'badgeBg': _C.tinggiText.withOpacity(0.12)};
+        return {
+          'label':   'Darurat',
+          'text':    _C.daruratText,
+          'bg':      _C.daruratBg,
+          'badgeBg': _C.daruratText.withOpacity(0.12),
+        };
       case AlertLevel.darurat:
-        return {'label': 'Darurat', 'text': _C.daruratText, 'bg': _C.daruratBg, 'badgeBg': _C.daruratText.withOpacity(0.12)};
+        return {
+          'label':   'Darurat',
+          'text':    _C.daruratText,
+          'bg':      _C.daruratBg,
+          'badgeBg': _C.daruratText.withOpacity(0.12),
+        };
       case AlertLevel.waspada:
-        return {'label': 'Waspada', 'text': _C.waspadaText, 'bg': const Color(0xFFFFF3CD), 'badgeBg': _C.waspadaText.withOpacity(0.12)};
+        return {
+          'label':   'Waspada',
+          'text':    _C.waspadaText,
+          'bg':      _C.waspadaBg,
+          'badgeBg': _C.waspadaText.withOpacity(0.12),
+        };
     }
   }
 }
 
 // ============================================================
-// CONTACT PICKER SHEET — ambil dari emergency_contacts di DB
+// CONTACT PICKER SHEET
 // ============================================================
 class _ContactPickerSheet extends StatefulWidget {
   @override
@@ -653,7 +837,9 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Tidak bisa menghubungi $number'), backgroundColor: _C.tinggiText),
+          SnackBar(
+              content: Text('Tidak bisa menghubungi $number'),
+              backgroundColor: _C.tinggiText),
         );
       }
     }
@@ -670,23 +856,29 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // handle bar
-          Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2))),
-          // header
+          Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2))),
           Row(
             children: [
               Container(
                 width: 36, height: 36,
-                decoration: BoxDecoration(color: _C.tinggiBg, borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(
+                    color: _C.tinggiBg, borderRadius: BorderRadius.circular(10)),
                 child: const Icon(Icons.phone_rounded, size: 18, color: _C.tinggiText),
               ),
               const SizedBox(width: 10),
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Hubungi Kontak Darurat', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark)),
-                  Text('Pilih kontak yang akan dihubungi', style: TextStyle(fontSize: 11, color: _C.textMid)),
+                  Text('Hubungi Kontak Darurat',
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark)),
+                  Text('Pilih kontak yang akan dihubungi',
+                      style: TextStyle(fontSize: 11, color: _C.textMid)),
                 ],
               ),
             ],
@@ -694,9 +886,10 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
           const SizedBox(height: 16),
           const Divider(height: 1, color: Color(0xFFF1F5F9)),
           const SizedBox(height: 8),
-          // konten
           if (_loading)
-            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+            const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()))
           else if (_contacts.isEmpty)
             Padding(
               padding: const EdgeInsets.all(24),
@@ -704,15 +897,22 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                 children: [
                   const Icon(Icons.contacts_outlined, size: 40, color: _C.textMid),
                   const SizedBox(height: 8),
-                  const Text('Belum ada kontak darurat', style: TextStyle(fontSize: 13, color: _C.textMid)),
+                  const Text('Belum ada kontak darurat',
+                      style: TextStyle(fontSize: 13, color: _C.textMid)),
                   const SizedBox(height: 4),
-                  const Text('Tambahkan di menu Profil → Kontak Darurat', style: TextStyle(fontSize: 11, color: _C.textMid), textAlign: TextAlign.center),
+                  const Text('Tambahkan di menu Profil → Kontak Darurat',
+                      style: TextStyle(fontSize: 11, color: _C.textMid),
+                      textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close, size: 16, color: _C.primary),
-                    label: const Text('Tutup', style: TextStyle(color: _C.primary, fontSize: 13)),
-                    style: OutlinedButton.styleFrom(side: const BorderSide(color: _C.primary), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                    label: const Text('Tutup',
+                        style: TextStyle(color: _C.primary, fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: _C.primary),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10))),
                   ),
                 ],
               ),
@@ -722,12 +922,13 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _contacts.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
               itemBuilder: (_, i) {
-                final c = _contacts[i];
-                final name = c['contact_name']?.toString() ?? '-';
-                final number = c['contact_number']?.toString() ?? '';
-                final rel = c['relationship']?.toString() ?? '';
+                final c       = _contacts[i];
+                final name    = c['contact_name']?.toString() ?? '-';
+                final number  = c['contact_number']?.toString() ?? '';
+                final rel     = c['relationship']?.toString() ?? '';
                 final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
                 return ListTile(
@@ -735,19 +936,30 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                   leading: CircleAvatar(
                     radius: 22,
                     backgroundColor: _C.primaryLight,
-                    child: Text(initial, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary)),
+                    child: Text(initial,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary)),
                   ),
-                  title: Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _C.textDark)),
+                  title: Text(name,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600, color: _C.textDark)),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(number, style: const TextStyle(fontSize: 12, color: _C.textMid)),
+                      Text(number,
+                          style: const TextStyle(fontSize: 12, color: _C.textMid)),
                       if (rel.isNotEmpty)
                         Container(
                           margin: const EdgeInsets.only(top: 3),
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: _C.primaryLight, borderRadius: BorderRadius.circular(4)),
-                          child: Text(rel, style: const TextStyle(fontSize: 10, color: _C.primary, fontWeight: FontWeight.w600)),
+                          decoration: BoxDecoration(
+                              color: _C.primaryLight,
+                              borderRadius: BorderRadius.circular(4)),
+                          child: Text(rel,
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: _C.primary,
+                                  fontWeight: FontWeight.w600)),
                         ),
                     ],
                   ),
@@ -755,8 +967,11 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                     onTap: () => _call(number),
                     child: Container(
                       width: 40, height: 40,
-                      decoration: BoxDecoration(color: _C.tinggiText, borderRadius: BorderRadius.circular(12)),
-                      child: const Icon(Icons.phone_rounded, color: Colors.white, size: 18),
+                      decoration: BoxDecoration(
+                          color: _C.tinggiText,
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.phone_rounded,
+                          color: Colors.white, size: 18),
                     ),
                   ),
                 );
@@ -777,6 +992,7 @@ class NotificationDetailScreen extends StatefulWidget {
   final String namaLengkap;
   final File? fotoFile;
   final NotificationService service;
+  final HistoryItem? historyItem;
 
   const NotificationDetailScreen({
     super.key,
@@ -785,10 +1001,12 @@ class NotificationDetailScreen extends StatefulWidget {
     required this.namaLengkap,
     required this.fotoFile,
     required this.service,
+    this.historyItem,
   });
 
   @override
-  State<NotificationDetailScreen> createState() => _NotificationDetailScreenState();
+  State<NotificationDetailScreen> createState() =>
+      _NotificationDetailScreenState();
 }
 
 class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
@@ -797,24 +1015,40 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _sudahAman = widget.item.sudahDibaca;
+    // ── FIX: init dari sudahAman, BUKAN sudahDibaca
+    _sudahAman = widget.item.sudahAman;
   }
 
   Map<String, dynamic> get _levelData {
     switch (widget.item.level) {
       case AlertLevel.tinggi:
-        return {'label': 'Tinggi', 'text': _C.tinggiText, 'bg': _C.tinggiBg, 'badgeBg': _C.tinggiText.withOpacity(0.12)};
+        return {
+          'label':   'Tinggi',
+          'text':    _C.tinggiText,
+          'bg':      _C.tinggiBg,
+          'badgeBg': _C.tinggiText.withOpacity(0.12),
+        };
       case AlertLevel.darurat:
-        return {'label': 'Darurat', 'text': _C.daruratText, 'bg': _C.daruratBg, 'badgeBg': _C.daruratText.withOpacity(0.12)};
+        return {
+          'label':   'Darurat',
+          'text':    _C.daruratText,
+          'bg':      _C.daruratBg,
+          'badgeBg': _C.daruratText.withOpacity(0.12),
+        };
       case AlertLevel.waspada:
-        return {'label': 'Waspada', 'text': _C.waspadaText, 'bg': _C.waspadaBg, 'badgeBg': _C.waspadaText.withOpacity(0.12)};
+        return {
+          'label':   'Waspada',
+          'text':    _C.waspadaText,
+          'bg':      _C.waspadaBg,
+          'badgeBg': _C.waspadaText.withOpacity(0.12),
+        };
     }
   }
 
-  // Tandai aman — update Firebase & ubah state lokal
+  // ── FIX: panggil markAsSafe, bukan markAsRead
   Future<void> _tandaiAman() async {
     if (_sudahAman) return;
-    await widget.service.markAsRead(widget.item.id);
+    await widget.service.markAsSafe(widget.item.id);
     if (mounted) setState(() => _sudahAman = true);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -826,7 +1060,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
               Text('Kejadian ditandai aman', style: TextStyle(fontSize: 13)),
             ],
           ),
-          backgroundColor: _C.waspadaText,
+          backgroundColor: _C.amanText,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           margin: const EdgeInsets.all(16),
@@ -836,7 +1070,6 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     }
   }
 
-  // Buka contact picker
   void _showContactPicker() {
     showModalBottomSheet(
       context: context,
@@ -844,13 +1077,6 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       isScrollControlled: true,
       builder: (_) => _ContactPickerSheet(),
     );
-  }
-
-  // Navigasi ke History
-  void _goToHistory() {
-    // Pop detail screen dulu, lalu push history
-    Navigator.of(context).popUntil((route) => route.isFirst);
-    Navigator.pushNamed(context, AppRoutes.history);
   }
 
   @override
@@ -898,18 +1124,30 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
           CircleAvatar(
             radius: 22,
             backgroundColor: _C.primary.withOpacity(0.12),
-            backgroundImage: widget.fotoFile != null ? FileImage(widget.fotoFile!) : null,
+            backgroundImage:
+                widget.fotoFile != null ? FileImage(widget.fotoFile!) : null,
             child: widget.fotoFile == null
-                ? Text(widget.namaLengkap.isNotEmpty ? widget.namaLengkap[0].toUpperCase() : '?',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary))
+                ? Text(
+                    widget.namaLengkap.isNotEmpty
+                        ? widget.namaLengkap[0].toUpperCase()
+                        : '?',
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _C.primary))
                 : null,
           ),
           const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Halo, ${widget.namaLengkap}', style: const TextStyle(fontSize: 12, color: _C.textMid)),
-              Text('Monitoring ${widget.namaLansia}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _C.textDark)),
+              Text('Halo, ${widget.namaLengkap}',
+                  style: const TextStyle(fontSize: 12, color: _C.textMid)),
+              Text('Monitoring ${widget.namaLansia}',
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _C.textDark)),
             ],
           ),
         ],
@@ -918,7 +1156,9 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark));
+    return Text(title,
+        style: const TextStyle(
+            fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark));
   }
 
   Widget _buildAlertCard(BuildContext context, Map<String, dynamic> ld) {
@@ -926,48 +1166,72 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4))
+        ],
       ),
       child: Column(
         children: [
-          // header biru dengan back btn
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: const BoxDecoration(color: _C.primary, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+            decoration: const BoxDecoration(
+                color: _C.primary,
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(20))),
             child: Row(
               children: [
                 GestureDetector(
                   onTap: () => Navigator.maybePop(context),
                   child: Container(
                     width: 32, height: 32,
-                    decoration: BoxDecoration(color: AppColors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.chevron_left, color: AppColors.white, size: 22),
+                    decoration: BoxDecoration(
+                        color: AppColors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.chevron_left,
+                        color: AppColors.white, size: 22),
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Text('Detail Peringatan', style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                const Text('Detail Peringatan',
+                    style: TextStyle(
+                        color: AppColors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600)),
                 const Spacer(),
-                // badge status aman
+                // Badge "Aman / Aktif" — berdasarkan sudahAman
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _sudahAman ? _C.waspadaText.withOpacity(0.9) : AppColors.white.withOpacity(0.2),
+                    color: _sudahAman
+                        ? _C.amanText.withOpacity(0.9)
+                        : AppColors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_sudahAman ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded, size: 12, color: Colors.white),
+                      Icon(
+                          _sudahAman
+                              ? Icons.check_circle_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                          size: 12,
+                          color: Colors.white),
                       const SizedBox(width: 4),
-                      Text(_sudahAman ? 'Aman' : 'Aktif', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                      Text(_sudahAman ? 'Aman' : 'Aktif',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          // konten kejadian
           Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.all(14),
@@ -983,26 +1247,46 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   children: [
                     Container(
                       width: 44, height: 44,
-                      decoration: BoxDecoration(color: ld['bg'] as Color, borderRadius: BorderRadius.circular(12)),
-                      child: Icon(widget.item.icon, size: 22, color: ld['text'] as Color),
+                      decoration: BoxDecoration(
+                          color: ld['bg'] as Color,
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Icon(widget.item.icon,
+                          size: 22, color: ld['text'] as Color),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(child: Text(widget.item.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _C.textDark))),
+                    Expanded(
+                        child: Text(widget.item.title,
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: _C.textDark))),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: ld['text'] as Color, borderRadius: BorderRadius.circular(6)),
-                      child: Text(ld['label'] as String, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.white)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: ld['text'] as Color,
+                          borderRadius: BorderRadius.circular(6)),
+                      child: Text(ld['label'] as String,
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.white)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(widget.item.description, style: const TextStyle(fontSize: 13, color: _C.textDark, height: 1.4)),
+                Text(widget.item.description,
+                    style: const TextStyle(
+                        fontSize: 13, color: _C.textDark, height: 1.4)),
                 const SizedBox(height: 10),
+                // Di detail: tampilkan jam + tanggal lengkap
                 Row(
                   children: [
-                    const Icon(Icons.access_time_rounded, size: 13, color: _C.textMid),
+                    const Icon(Icons.access_time_rounded,
+                        size: 13, color: _C.textMid),
                     const SizedBox(width: 4),
-                    Text('${widget.item.time}  ·  ${widget.item.date}', style: const TextStyle(fontSize: 11, color: _C.textMid)),
+                    Text('${widget.item.time}  ·  ${widget.item.date}',
+                        style: const TextStyle(fontSize: 11, color: _C.textMid)),
                   ],
                 ),
               ],
@@ -1014,12 +1298,18 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   }
 
   Widget _buildMapCard(BuildContext context) {
-    final bool hasValidLocation = widget.item.location.latitude != 0.0 || widget.item.location.longitude != 0.0;
+    final bool hasValidLocation = widget.item.location.latitude != 0.0 ||
+        widget.item.location.longitude != 0.0;
     return Container(
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
       ),
       child: Column(
         children: [
@@ -1033,16 +1323,42 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   ? Stack(
                       children: [
                         FlutterMap(
-                          options: MapOptions(initialCenter: widget.item.location, initialZoom: 15),
+                          options: MapOptions(
+                              initialCenter: widget.item.location,
+                              initialZoom: 15),
                           children: [
-                            TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.guardianwalk.app'),
-                            CircleLayer(circles: [CircleMarker(point: widget.item.location, radius: 80, color: _C.waspadaText.withOpacity(0.15), borderColor: _C.waspadaText, borderStrokeWidth: 2, useRadiusInMeter: true)]),
+                            TileLayer(
+                                urlTemplate:
+                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName: 'com.guardianwalk.app'),
+                            CircleLayer(circles: [
+                              CircleMarker(
+                                  point: widget.item.location,
+                                  radius: 80,
+                                  color: _C.waspadaText.withOpacity(0.15),
+                                  borderColor: _C.waspadaText,
+                                  borderStrokeWidth: 2,
+                                  useRadiusInMeter: true)
+                            ]),
                             MarkerLayer(markers: [
                               Marker(
-                                point: widget.item.location, width: 40, height: 40,
+                                point: widget.item.location,
+                                width: 40,
+                                height: 40,
                                 child: Container(
-                                  decoration: BoxDecoration(color: _C.primary, shape: BoxShape.circle, border: Border.all(color: AppColors.white, width: 2.5), boxShadow: [BoxShadow(color: _C.primary.withOpacity(0.4), blurRadius: 8, spreadRadius: 2)]),
-                                  child: const Icon(Icons.person_pin_rounded, color: AppColors.white, size: 22),
+                                  decoration: BoxDecoration(
+                                      color: _C.primary,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: AppColors.white, width: 2.5),
+                                      boxShadow: [
+                                        BoxShadow(
+                                            color: _C.primary.withOpacity(0.4),
+                                            blurRadius: 8,
+                                            spreadRadius: 2)
+                                      ]),
+                                  child: const Icon(Icons.person_pin_rounded,
+                                      color: AppColors.white, size: 22),
                                 ),
                               ),
                             ]),
@@ -1052,9 +1368,18 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                           top: 10, left: 0, right: 0,
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(color: AppColors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(20), border: Border.all(color: _C.waspadaText, width: 1)),
-                              child: const Text('Posisi Terakhir Lansia', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _C.waspadaText)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(
+                                  color: AppColors.white.withOpacity(0.9),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: _C.waspadaText, width: 1)),
+                              child: const Text('Posisi Terakhir Lansia',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: _C.waspadaText)),
                             ),
                           ),
                         ),
@@ -1062,11 +1387,16 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                     )
                   : Container(
                       color: const Color(0xFFF1F5F9),
-                      child: const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Icon(Icons.location_off_rounded, size: 36, color: _C.textMid),
-                        SizedBox(height: 8),
-                        Text('Lokasi tidak tersedia', style: TextStyle(fontSize: 12, color: _C.textMid)),
-                      ])),
+                      child: const Center(
+                          child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                            Icon(Icons.location_off_rounded,
+                                size: 36, color: _C.textMid),
+                            SizedBox(height: 8),
+                            Text('Lokasi tidak tersedia',
+                                style: TextStyle(fontSize: 12, color: _C.textMid)),
+                          ])),
                     ),
             ),
           ),
@@ -1074,12 +1404,22 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
               child: SizedBox(
-                width: double.infinity, height: 44,
+                width: double.infinity,
+                height: 44,
                 child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.location, arguments: widget.item.location),
+                  onPressed: () => Navigator.pushNamed(
+                      context, AppRoutes.location,
+                      arguments: widget.item.location),
                   icon: const Icon(Icons.navigation_rounded, size: 18),
-                  label: const Text('Buka Navigasi ke Lokasi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  style: ElevatedButton.styleFrom(backgroundColor: _C.primary, foregroundColor: AppColors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+                  label: const Text('Buka Navigasi ke Lokasi',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: _C.primary,
+                      foregroundColor: AppColors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      elevation: 0),
                 ),
               ),
             ),
@@ -1088,50 +1428,56 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     );
   }
 
-  // ── Action Panel — 3 tombol utama ─────────────────────────
   Widget _buildActionPanel(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Apa yang ingin kamu lakukan?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _C.textDark)),
+          const Text('Apa yang ingin kamu lakukan?',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: _C.textDark)),
           const SizedBox(height: 12),
-
-          // Tombol 1: Hubungi — paling menonjol, buka contact picker
           SizedBox(
-            width: double.infinity, height: 48,
+            width: double.infinity,
+            height: 48,
             child: ElevatedButton.icon(
               onPressed: _showContactPicker,
               icon: const Icon(Icons.phone_rounded, size: 18),
-              label: const Text('Hubungi Sekarang', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              label: const Text('Hubungi Sekarang',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _C.tinggiText,
                 foregroundColor: AppColors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
             ),
           ),
           const SizedBox(height: 10),
-
-          // Tombol 2 & 3: Tandai Aman + Lihat Riwayat — sejajar
           Row(
             children: [
-              // Tandai Aman — animasi berubah setelah diklik
               Expanded(
                 child: SizedBox(
                   height: 44,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     decoration: BoxDecoration(
-                      color: _sudahAman ? _C.waspadaBg : Colors.transparent,
-                      border: Border.all(color: _C.waspadaText),
+                      color: _sudahAman ? _C.amanBg : Colors.transparent,
+                      border: Border.all(color: _C.amanText),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Material(
@@ -1143,14 +1489,19 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              _sudahAman ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
+                              _sudahAman
+                                  ? Icons.check_circle_rounded
+                                  : Icons.check_circle_outline_rounded,
                               size: 16,
-                              color: _C.waspadaText,
+                              color: _C.amanText,
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              _sudahAman ? '✓ Sudah Aman' : 'Tandai Aman',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _C.waspadaText),
+                              _sudahAman ? 'Sudah Aman' : 'Tandai Aman',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _C.amanText),
                             ),
                           ],
                         ),
@@ -1160,19 +1511,38 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              // Lihat Riwayat — navigasi ke history screen
               Expanded(
                 child: SizedBox(
                   height: 44,
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      Navigator.pushNamed(context, AppRoutes.history);
+                      if (widget.historyItem != null) {
+                        Navigator.of(context)
+                            .popUntil((route) => route.isFirst);
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.history,
+                          arguments: {'openHistoryId': widget.historyItem!.id},
+                        );
+                      } else {
+                        Navigator.pushNamed(context, AppRoutes.history);
+                      }
                     },
-                    icon: const Icon(Icons.history_rounded, size: 16, color: _C.primary),
-                    label: const Text('Lihat Riwayat', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _C.primary)),
+                    icon: const Icon(Icons.history_rounded,
+                        size: 16, color: _C.primary),
+                    label: Text(
+                      widget.historyItem != null
+                          ? 'Lihat di Riwayat'
+                          : 'Lihat Riwayat',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _C.primary),
+                    ),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: _C.primary),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
                 ),
@@ -1180,19 +1550,23 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
             ],
           ),
           const SizedBox(height: 10),
-
-          // Hint info
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: _C.primaryLight, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+                color: _C.primaryLight,
+                borderRadius: BorderRadius.circular(10)),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, size: 13, color: _C.primary),
+                const Icon(Icons.info_outline_rounded,
+                    size: 13, color: _C.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Data sensor detail (IMU, HC-SR04, status sistem) tersedia di menu Riwayat.',
-                    style: TextStyle(fontSize: 11, color: _C.primary.withOpacity(0.85), height: 1.4),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: _C.primary.withOpacity(0.85),
+                        height: 1.4),
                   ),
                 ),
               ],

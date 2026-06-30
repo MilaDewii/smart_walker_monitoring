@@ -127,7 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (_legacyWalkerAlias(storedId) != null) _legacyWalkerAlias(storedId)!,
         storedId,
       ],
-      'walker_001',
+      // 'walker_001',
     ];
 
     for (final candidate in candidates.toSet()) {

@@ -20,10 +20,12 @@ class StatusBanner extends StatelessWidget {
       return _StatusLevel.darurat;
     }
     // Kuning: confidence >= 40% → gerakan berisiko
-    if (walkerData.fallConfidence >= 0.4 ||
-        walkerData.status == 'peringatan') {
+    if (walkerData.fuzzyRisk >= 0.30 ||
+        walkerData.mendekatiGeofence ||
+        walkerData.ultrasonicFront) {
       return _StatusLevel.waspada;
     }
+
     return _StatusLevel.aman;
   }
 
@@ -51,16 +53,24 @@ class StatusBanner extends StatelessWidget {
 
   String get _subtitle {
     if (walkerData.jatuh) {
-      return 'Terdeteksi Jatuh! Segera Periksa Lansia !';
+      return 'Terdeteksi Jatuh! Segera Periksa Lansia!';
     }
     if (!walkerData.ultrasonicBack) {
-      return 'Lansia Tidak Terdeteksi, Segera Periksa Lansia !';
+      return 'Lansia Tidak Terdeteksi di Belakang Walker!';
     }
     if (walkerData.geofenceStatus == 'outside') {
-      return 'Terdeteksi Kelainan, Segera Periksa Lansia !';
+      return 'Lansia Keluar Area Aman!';
+    }
+    if (walkerData.mendekatiGeofence) {
+      final sisa = (walkerData.geofenceRadius - walkerData.jarakDariPusat)
+          .toStringAsFixed(1);
+      return 'Mendekati Batas Area Aman — sisa $sisa m';
+    }
+    if (walkerData.ultrasonicFront) {
+      return 'Hambatan Terdeteksi di Depan Walker!';
     }
     if (_level == _StatusLevel.waspada) {
-      return 'Gerakan Berisiko Terdeteksi, Harap Perhatikan !';
+      return 'Gerakan Berisiko Terdeteksi, Harap Perhatikan!';
     }
     return 'Tidak ada kejadian darurat';
   }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
-import 'package:firebase_database/firebase_database.dart';
 import '../database/database_helper.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -13,10 +12,48 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  bool _isLoading = false;
+
   @override
   void initState() {
     super.initState();
-    // Tidak auto-pindah, user klik tombol sendiri
+  }
+
+  Future<void> _onMulai() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final session = await DatabaseHelper.instance.getLoginSession();
+      print("SESSION SPLASH: $session");
+
+      if (!mounted) return;
+
+      if (session == null) {
+        Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
+        return;
+      }
+
+      final pairedWalker = await DatabaseHelper.instance.getPairedWalkers();
+      print("PAIRED WALKER: $pairedWalker");
+
+      if (!mounted) return;
+
+      if (pairedWalker.isEmpty) {
+        Navigator.pushReplacementNamed(context, AppRoutes.connectWalker);
+      } else {
+        Navigator.pushReplacementNamed(context, AppRoutes.monitoring);
+      }
+    } catch (e) {
+      print("Error saat navigasi: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Terjadi kesalahan: $e")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -31,7 +68,6 @@ class _SplashScreenState extends State<SplashScreen> {
             children: [
               const Spacer(flex: 2),
 
-              // Logo SVG - ukuran besar seperti design
               SvgPicture.asset(
                 'assets/images/logo_guard.svg',
                 width: 300,
@@ -39,7 +75,6 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Teks "Guardian" + "Walk" dengan style berbeda
               RichText(
                 text: TextSpan(
                   children: [
@@ -47,7 +82,7 @@ class _SplashScreenState extends State<SplashScreen> {
                       text: 'Guardian',
                       style: TextStyle(
                         fontSize: 36,
-                        fontWeight: FontWeight.w400, // tipis
+                        fontWeight: FontWeight.w400,
                         color: AppColors.primary,
                         letterSpacing: 0.5,
                       ),
@@ -66,7 +101,6 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Garis pemisah
               Container(
                 width: double.infinity,
                 height: 1.5,
@@ -74,7 +108,6 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               const SizedBox(height: 13),
 
-              // Tagline
               Text(
                 'SMART ELDERY SAFETY SYSTEM',
                 style: TextStyle(
@@ -87,76 +120,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
               const Spacer(flex: 2),
 
-              // Tombol Mulai Sekarang
               SizedBox(
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      await FirebaseDatabase.instance.ref("test").set({
-                        "status": "connected",
-                        "time": DateTime.now().toString(),
-                      });
-
-                      print("Firebase RTDB Connected");
-
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Firebase Connected"),
-                          ),
-                        );
-
-                        final session =
-                            await DatabaseHelper.instance.getLoginSession();
-
-                        print("SESSION SPLASH:");
-                        print(session);
-
-                        // belum login
-                        if (session == null) {
-                          Navigator.pushReplacementNamed(
-                            context,
-                            AppRoutes.onboarding,
-                          );
-
-                          return;
-                        }
-
-                        // cek walker pernah dipairing
-                        final pairedWalker =
-                            await DatabaseHelper.instance.getPairedWalkers();
-
-                        print("PAIRED WALKER:");
-                        print(pairedWalker);
-
-                        // login tapi belum scan walker
-                        if (pairedWalker.isEmpty) {
-                          Navigator.pushReplacementNamed(
-                            context,
-                            AppRoutes.connectWalker,
-                          );
-                        } else {
-                          // login + walker sudah tersambung
-                          Navigator.pushReplacementNamed(
-                            context,
-                            AppRoutes.monitoring,
-                          );
-                        }
-                      }
-                    } catch (e) {
-                      print("Firebase Error: $e");
-
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text("Firebase Error: $e"),
-                          ),
-                        );
-                      }
-                    }
-                  },
+                  onPressed: _isLoading ? null : _onMulai,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     elevation: 0,
@@ -164,15 +132,24 @@ class _SplashScreenState extends State<SplashScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Mulai Sekarang',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Text(
+                          'Mulai Sekarang',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                 ),
               ),
 

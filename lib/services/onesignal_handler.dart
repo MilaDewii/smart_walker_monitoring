@@ -5,6 +5,8 @@ import '../database/database_helper.dart';
 import '../models/alert_model.dart';
 import '../services/notification_service.dart';
 import '../screens/notif_screen.dart' show NotificationDetailScreen;
+import '../services/history_service.dart';
+import '../utils/app_routes.dart';
 
 void setupOneSignalClickHandler(GlobalKey<NavigatorState> navigatorKey) {
   OneSignal.Notifications.addClickListener((event) async {
@@ -66,6 +68,13 @@ void setupOneSignalClickHandler(GlobalKey<NavigatorState> navigatorKey) {
     // Tunggu navigator siap (penting untuk cold start)
     await _waitForNavigatorReady(navigatorKey);
 
+    final historyService = HistoryService(walkerId: walkerId);
+    final historyItem = await historyService.findByNotification(
+      timestamp: item!.timestamp,
+      title: item!.title,
+    );
+    debugPrint('[History] historyItem id: ${historyItem?.id}');
+
     navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (_) => NotificationDetailScreen(
@@ -74,6 +83,7 @@ void setupOneSignalClickHandler(GlobalKey<NavigatorState> navigatorKey) {
           namaLengkap: namaLengkap,
           fotoFile: fotoFile,
           service: service,
+          historyItem: historyItem, // ◄ TAMBAH INI
         ),
       ),
     );
