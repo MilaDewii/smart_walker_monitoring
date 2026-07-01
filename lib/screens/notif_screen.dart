@@ -115,14 +115,29 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
       _walkerSub = _service!.watchNotifications().listen(
         (items) {
-          if (mounted) setState(() { _alerts = items; _isLoading = false; });
+          if (mounted) {
+            setState(() {
+              _alerts = items;
+              _isLoading = false;
+            });
+          }
         },
         onError: (e) {
-          if (mounted) setState(() { _isLoading = false; _errorMsg = 'Gagal memuat notifikasi: $e'; });
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              _errorMsg = 'Gagal memuat notifikasi: $e';
+            });
+          }
         },
       );
     } catch (e) {
-      if (mounted) setState(() { _isLoading = false; _errorMsg = 'Terjadi kesalahan: $e'; });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMsg = 'Terjadi kesalahan: $e';
+        });
+      }
     }
   }
 
@@ -139,7 +154,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
     if (_selectedDateFilter == 'Hari ini') {
       final now      = DateTime.now();
-      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final todayStr =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
       list = list.where((a) => a.rawDate == todayStr);
     }
 
@@ -163,14 +179,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   // ── Buka detail: hanya tandai sudahDibaca (titik merah hilang)
   //    TIDAK otomatis tandai aman — user harus klik sendiri
   Future<void> _openDetail(AlertItem item) async {
-    // Tandai sudah dibaca → titik merah hilang
-    if (!item.sudahDibaca) {
-      await _service?.markAsRead(item.id);
-    }
-
+    await _service?.markAsRead(item.id);
     if (!mounted) return;
 
-    // Cari history yang relevan
+    // Cari history yang relevan berdasarkan timestamp notifikasi
     HistoryItem? historyItem;
     if (_walkerId != null) {
       try {
@@ -203,12 +215,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   int get _totalToday {
-    final now      = DateTime.now();
-    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    return _alerts.where((a) => a.rawDate == todayStr).length;
+    final now = DateTime.now();
+    final today =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    return _alerts.where((a) => a.rawDate == today).length;
   }
 
-  int get _daruratToday     => _alerts.where((a) => a.level == AlertLevel.darurat).length;
+  int get _daruratToday =>
+      _alerts.where((a) => a.level == AlertLevel.darurat).length;
   int get _belumDibacaToday => _alerts.where((a) => !a.sudahDibaca).length;
 
   @override
@@ -261,12 +275,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
               CircleAvatar(
                 radius: 22,
                 backgroundColor: _C.primary.withOpacity(0.15),
-                backgroundImage: _fotoFile != null ? FileImage(_fotoFile!) : null,
+                backgroundImage:
+                    _fotoFile != null ? FileImage(_fotoFile!) : null,
                 child: _fotoFile == null
                     ? Text(
-                        _namaLengkap.isNotEmpty ? _namaLengkap[0].toUpperCase() : '?',
+                        _namaLengkap.isNotEmpty
+                            ? _namaLengkap[0].toUpperCase()
+                            : '?',
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: _C.primary),
                       )
                     : null,
               ),
@@ -278,18 +297,24 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       style: const TextStyle(fontSize: 12, color: _C.textMid)),
                   Text('Monitoring $_namaLansia',
                       style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold, color: _C.textDark)),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: _C.textDark)),
                 ],
               ),
               const Spacer(),
               if (_walkerId != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                      color: _C.primaryLight, borderRadius: BorderRadius.circular(8)),
+                      color: _C.primaryLight,
+                      borderRadius: BorderRadius.circular(8)),
                   child: Text(_walkerId!,
                       style: const TextStyle(
-                          fontSize: 10, fontWeight: FontWeight.w600, color: _C.primary)),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: _C.primary)),
                 ),
             ],
           ),
@@ -381,17 +406,21 @@ class _NotificationScreenState extends State<NotificationScreen> {
           GestureDetector(
             onTap: () => Navigator.maybePop(context),
             child: Container(
-              width: 32, height: 32,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                   color: AppColors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.chevron_left, color: AppColors.white, size: 22),
+              child: const Icon(Icons.chevron_left,
+                  color: AppColors.white, size: 22),
             ),
           ),
           const SizedBox(width: 10),
           const Text('Notifikasi',
               style: TextStyle(
-                  color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  color: AppColors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600)),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -401,13 +430,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
             child: Row(
               children: [
                 Container(
-                    width: 6, height: 6,
+                    width: 6,
+                    height: 6,
                     decoration: const BoxDecoration(
                         color: Color(0xFF4ADE80), shape: BoxShape.circle)),
                 const SizedBox(width: 4),
                 const Text('Live',
                     style: TextStyle(
-                        color: AppColors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                        color: AppColors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -460,7 +492,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+        decoration:
+            BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -469,7 +502,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
               const SizedBox(width: 4),
               Text('$count',
                   style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold, color: iconColor)),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: iconColor)),
             ]),
             const SizedBox(height: 2),
             Text(label,
@@ -491,7 +526,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         children: [
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            child: Row(children: _filters.map((f) => _buildFilterChip(f)).toList()),
+            child: Row(
+                children: _filters.map((f) => _buildFilterChip(f)).toList()),
           ),
           const SizedBox(height: 8),
           Align(alignment: Alignment.centerRight, child: _buildDateDropdown()),
@@ -530,9 +566,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
         final Size size = box.size;
         final result = await showMenu<String>(
           context: context,
-          position: RelativeRect.fromLTRB(
-              offset.dx, offset.dy + size.height + 4, offset.dx + size.width, 0),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          position: RelativeRect.fromLTRB(offset.dx, offset.dy + size.height + 4,
+              offset.dx + size.width, 0),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           elevation: 4,
           items: _dateFilters
               .map((d) => PopupMenuItem<String>(
@@ -570,19 +607,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
           children: [
             Icon(Icons.calendar_today_rounded,
                 size: 12,
-                color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
+                color:
+                    _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
             const SizedBox(width: 4),
             Text(_selectedDateFilter,
                 style: TextStyle(
                     fontSize: 11,
-                    color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid,
+                    color: _selectedDateFilter == 'Hari ini'
+                        ? _C.primary
+                        : _C.textMid,
                     fontWeight: _selectedDateFilter == 'Hari ini'
                         ? FontWeight.w600
                         : FontWeight.normal)),
             const SizedBox(width: 2),
             Icon(Icons.keyboard_arrow_down_rounded,
                 size: 14,
-                color: _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
+                color:
+                    _selectedDateFilter == 'Hari ini' ? _C.primary : _C.textMid),
           ],
         ),
       ),
@@ -599,7 +640,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
             children: [
               Text('Daftar Peringatan',
                   style: TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 13, color: _C.textDark)),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: _C.textDark)),
               Text('Terbaru Di atas',
                   style: TextStyle(fontSize: 10, color: _C.textMid)),
             ],
@@ -609,7 +652,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
             onTap: _markAllRead,
             child: const Text('Tandai Semua Dibaca',
                 style: TextStyle(
-                    fontSize: 10, color: _C.primary, fontWeight: FontWeight.w600)),
+                    fontSize: 10,
+                    color: _C.primary,
+                    fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -634,7 +679,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
             Row(
               children: [
                 Container(
-                  width: 34, height: 34,
+                  width: 34,
+                  height: 34,
                   decoration: BoxDecoration(
                       color: ld['bg'] as Color,
                       borderRadius: BorderRadius.circular(10)),
@@ -648,7 +694,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             fontWeight: FontWeight.bold,
                             color: _C.textDark))),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                       color: ld['badgeBg'] as Color,
                       borderRadius: BorderRadius.circular(6)),
@@ -659,21 +706,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           color: ld['text'] as Color)),
                 ),
                 const SizedBox(width: 6),
-                // ── FIX: tampilkan jam saja (HH:mm) di tile
-                // item.time sudah diformat "HH:mm WIB" oleh _parseTime
-                // ambil bagian sebelum " WIB" agar ringkas
-                Text(
-                  item.time.contains(' ')
-                      ? item.time.split(' ').first  // "22:04"
-                      : item.time,
-                  style: const TextStyle(fontSize: 10, color: _C.textMid),
-                ),
+                Text(item.time.split(' ').first,
+                    style: const TextStyle(fontSize: 10, color: _C.textMid)),
                 const SizedBox(width: 4),
-                // Titik merah = belum dibaca (sudahDibaca)
+                // Titik merah = belum dibaca
                 Container(
-                  width: 7, height: 7,
+                  width: 7,
+                  height: 7,
                   decoration: BoxDecoration(
-                      color: item.sudahDibaca ? Colors.transparent : _C.unreadDot,
+                      color: item.sudahDibaca
+                          ? Colors.transparent
+                          : _C.unreadDot,
                       shape: BoxShape.circle),
                 ),
               ],
@@ -826,7 +869,12 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
 
   Future<void> _load() async {
     final contacts = await DatabaseHelper.instance.getEmergencyContacts();
-    if (mounted) setState(() { _contacts = contacts; _loading = false; });
+    if (mounted) {
+      setState(() {
+        _contacts = contacts;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _call(String number) async {
@@ -857,7 +905,8 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
                   color: const Color(0xFFE2E8F0),
@@ -865,10 +914,12 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
           Row(
             children: [
               Container(
-                width: 36, height: 36,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                     color: _C.tinggiBg, borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.phone_rounded, size: 18, color: _C.tinggiText),
+                child: const Icon(Icons.phone_rounded,
+                    size: 18, color: _C.tinggiText),
               ),
               const SizedBox(width: 10),
               const Column(
@@ -876,7 +927,9 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                 children: [
                   Text('Hubungi Kontak Darurat',
                       style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.bold, color: _C.textDark)),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: _C.textDark)),
                   Text('Pilih kontak yang akan dihubungi',
                       style: TextStyle(fontSize: 11, color: _C.textMid)),
                 ],
@@ -895,7 +948,8 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  const Icon(Icons.contacts_outlined, size: 40, color: _C.textMid),
+                  const Icon(Icons.contacts_outlined,
+                      size: 40, color: _C.textMid),
                   const SizedBox(height: 8),
                   const Text('Belum ada kontak darurat',
                       style: TextStyle(fontSize: 13, color: _C.textMid)),
@@ -932,26 +986,33 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                 final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
                 return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   leading: CircleAvatar(
                     radius: 22,
                     backgroundColor: _C.primaryLight,
                     child: Text(initial,
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold, color: _C.primary)),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: _C.primary)),
                   ),
                   title: Text(name,
                       style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600, color: _C.textDark)),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _C.textDark)),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(number,
-                          style: const TextStyle(fontSize: 12, color: _C.textMid)),
+                          style:
+                              const TextStyle(fontSize: 12, color: _C.textMid)),
                       if (rel.isNotEmpty)
                         Container(
                           margin: const EdgeInsets.only(top: 3),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                               color: _C.primaryLight,
                               borderRadius: BorderRadius.circular(4)),
@@ -966,7 +1027,8 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                   trailing: GestureDetector(
                     onTap: () => _call(number),
                     child: Container(
-                      width: 40, height: 40,
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                           color: _C.tinggiText,
                           borderRadius: BorderRadius.circular(12)),
@@ -1062,7 +1124,8 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
           ),
           backgroundColor: _C.amanText,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 2),
         ),
@@ -1179,14 +1242,14 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: const BoxDecoration(
                 color: _C.primary,
-                borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(20))),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
             child: Row(
               children: [
                 GestureDetector(
                   onTap: () => Navigator.maybePop(context),
                   child: Container(
-                    width: 32, height: 32,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                         color: AppColors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8)),
@@ -1204,7 +1267,8 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                 // Badge "Aman / Aktif" — berdasarkan sudahAman
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: _sudahAman
                         ? _C.amanText.withOpacity(0.9)
@@ -1246,7 +1310,8 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                 Row(
                   children: [
                     Container(
-                      width: 44, height: 44,
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                           color: ld['bg'] as Color,
                           borderRadius: BorderRadius.circular(12)),
@@ -1365,7 +1430,9 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                           ],
                         ),
                         Positioned(
-                          top: 10, left: 0, right: 0,
+                          top: 10,
+                          left: 0,
+                          right: 0,
                           child: Center(
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -1395,7 +1462,8 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                                 size: 36, color: _C.textMid),
                             SizedBox(height: 8),
                             Text('Lokasi tidak tersedia',
-                                style: TextStyle(fontSize: 12, color: _C.textMid)),
+                                style:
+                                    TextStyle(fontSize: 12, color: _C.textMid)),
                           ])),
                     ),
             ),
@@ -1412,8 +1480,8 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                       arguments: widget.item.location),
                   icon: const Icon(Icons.navigation_rounded, size: 18),
                   label: const Text('Buka Navigasi ke Lokasi',
-                      style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: _C.primary,
                       foregroundColor: AppColors.white,

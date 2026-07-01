@@ -26,6 +26,10 @@ static final String _oneSignalApiKey =
   // FIREBASE REFERENCE
   // =========================================================
 
+  // =========================================================
+  // FIREBASE REFERENCE
+  // =========================================================
+
   DatabaseReference get _notifRef => _db.ref('Walkers/$walkerId/notification');
   DatabaseReference get _idsRef => _db.ref('Walkers/$walkerId/oneSignalIds');
   DatabaseReference _notifItemRef(String notifId) => _notifRef.child(notifId);
@@ -177,9 +181,11 @@ static final String _oneSignalApiKey =
   Stream<List<AlertItem>> watchNotifications() {
     return _notifRef.onValue.map((event) {
       final data = event.snapshot.value;
+
       if (data == null) return <AlertItem>[];
 
       final map = data as Map<dynamic, dynamic>;
+
       final List<AlertItem> items = [];
 
       for (final entry in map.entries) {
@@ -189,6 +195,7 @@ static final String _oneSignalApiKey =
             entry.value as Map<dynamic, dynamic>,
           ));
         } catch (e) {
+          debugPrint('[NotificationService] Parse notif error: $e');
           debugPrint('[NotificationService] Parse notif error: $e');
         }
       }
@@ -216,9 +223,13 @@ Future<void> markAsSafe(String notifId) async {
 
   Future<List<AlertItem>> fetchNotifications() async {
     final snap = await _notifRef.get();
-    if (!snap.exists || snap.value == null) return [];
+
+    if (!snap.exists || snap.value == null) {
+      return [];
+    }
 
     final map = snap.value as Map<dynamic, dynamic>;
+
     final List<AlertItem> items = [];
 
     for (final entry in map.entries) {
@@ -228,15 +239,28 @@ Future<void> markAsSafe(String notifId) async {
             entry.key.toString(),
             entry.value as Map<dynamic, dynamic>,
           ),
+        items.add(
+          AlertItem.fromFirebase(
+            entry.key.toString(),
+            entry.value as Map<dynamic, dynamic>,
+          ),
         );
       } catch (e) {
+        debugPrint('[NotificationService] Fetch notif error: $e');
         debugPrint('[NotificationService] Fetch notif error: $e');
       }
     }
 
-    items.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    items.sort(
+      (a, b) => b.timestamp.compareTo(a.timestamp),
+    );
+
     return items;
   }
+
+  // =========================================================
+  // MARK READ
+  // =========================================================
 
   // =========================================================
   // MARK READ
@@ -272,36 +296,33 @@ Future<void> markAsSafe(String notifId) async {
   // ADD NOTIFICATION
   // =========================================================
 
+  // =========================================================
+  // ADD NOTIFICATION
+  // =========================================================
+
   Future<void> addNotification(AlertItem item) async {
-    try {
-      await _notifItemRef(item.id).set(item.toFirebase());
-    } catch (e) {
-      debugPrint('[NotificationService] addNotification error: $e');
-      rethrow;
-    }
+    await _notifItemRef(item.id).set(item.toFirebase());
   }
 
   // =========================================================
   // DELETE
   // =========================================================
 
+  // =========================================================
+  // DELETE
+  // =========================================================
+
   Future<void> deleteNotification(String notifId) async {
-    try {
-      await _notifItemRef(notifId).remove();
-    } catch (e) {
-      debugPrint('[NotificationService] deleteNotification error: $e');
-      rethrow;
-    }
+    await _notifItemRef(notifId).remove();
   }
 
   Future<void> deleteAllNotifications() async {
-    try {
-      await _notifRef.remove();
-    } catch (e) {
-      debugPrint('[NotificationService] deleteAllNotifications error: $e');
-      rethrow;
-    }
+    await _notifRef.remove();
   }
+
+  // =========================================================
+  // UNREAD COUNT
+  // =========================================================
 
   // =========================================================
   // UNREAD COUNT
@@ -323,23 +344,31 @@ Future<void> markAsSafe(String notifId) async {
   // =========================================================
 
   StreamSubscription<DatabaseEvent> listenAndPushOneSignal() {
-    final Set<String> processedKeys = {};
+    final Set<String> processed = {};
 
-    // Step 1: Push notif LAMA yang belum dibaca (sekali saat start)
-    _notifRef.get().then((snap) async {
-      if (!snap.exists || snap.value == null) return;
-      final map = Map<String, dynamic>.from(snap.value as Map);
+    return _notifRef
+        .orderByChild('timestamp')
+        .limitToLast(1)
+        .onChildAdded
+        .listen(
+      (event) async {
+        final key = event.snapshot.key ?? "";
 
-      final playerIds = await _getAllPlayerIds();
-      if (playerIds.isEmpty) return;
+        if (processed.contains(key)) return;
+        processed.add(key);
 
-      for (final entry in map.entries) {
-        final key = entry.key.toString();
-        final data = Map<String, dynamic>.from(entry.value as Map);
+        final raw = event.snapshot.value;
+        if (raw == null) return;
 
-        if (data['sudahDibaca'] == true) continue;
+        final data = Map<String, dynamic>.from(
+          raw as Map<dynamic, dynamic>,
+        );
 
-        processedKeys.add(key);
+        if (data['sudahDibaca'] == true) return;
+
+        final playerIds = await _getAllPlayerIds();
+
+        if (playerIds.isEmpty) return;
 
         await sendOneSignalNotif(
           playerIds: playerIds,
@@ -349,9 +378,8 @@ Future<void> markAsSafe(String notifId) async {
           data: {
             'notifId': key,
             'walkerId': walkerId,
-            'latitude': data['latitude']?.toString() ?? '0',
-            'longitude': data['longitude']?.toString() ?? '0',
-            'level': data['level']?.toString() ?? 'tinggi',
+            'latitude': data['latitude']?.toString() ?? "0",
+            'longitude': data['longitude']?.toString() ?? "0",
           },
         );
         debugPrint('[OneSignal] Push notif lama: $key');

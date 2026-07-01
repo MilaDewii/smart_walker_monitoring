@@ -9,6 +9,8 @@ import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
 import 'widgets/location_card.dart';
 import 'widgets/status_banner.dart';
+// import '../services/notification_service.dart';
+// import 'package:firebase_database/firebase_database.dart';
 
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
@@ -27,6 +29,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   WalkerData _walkerData = WalkerData.empty();
 
   StreamSubscription<WalkerData>? _walkerSub;
+
+  // NotificationService? _notifService;
+  // StreamSubscription<DatabaseEvent>? _notifSub;
 
   // ── Animasi kedip saat bahaya ─────────────────────────────────────────────
   late AnimationController _blinkCtrl;
@@ -101,11 +106,17 @@ class _MonitoringScreenState extends State<MonitoringScreen>
       if (!mounted) return;
       setState(() => _walkerData = data);
     });
+
+// ── Tambahan baru: start listener notifikasi OneSignal ────
+    // _notifService = NotificationService(walkerId: walkerId);
+    // _notifSub?.cancel();
+    // _notifSub = _notifService!.listenAndPushOneSignal();
   }
 
   @override
   void dispose() {
     _walkerSub?.cancel();
+    // _notifSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -432,9 +443,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                     _fotoFile != null ? FileImage(_fotoFile!) : null,
                 child: _fotoFile == null
                     ? Text(
-                        _namaUser.isNotEmpty
-                            ? _namaUser[0].toUpperCase()
-                            : '?',
+                        _namaUser.isNotEmpty ? _namaUser[0].toUpperCase() : '?',
                         style: TextStyle(
                             fontSize:   20,
                             fontWeight: FontWeight.bold,
@@ -526,9 +535,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: (_walkerActive
-                ? AppColors.statusGreen
-                : AppColors.statusRed)
+        color: (_walkerActive ? AppColors.statusGreen : AppColors.statusRed)
             .withOpacity(0.12),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -540,9 +547,8 @@ class _MonitoringScreenState extends State<MonitoringScreen>
             height: 7,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _walkerActive
-                  ? AppColors.statusGreen
-                  : AppColors.statusRed,
+              color:
+                  _walkerActive ? AppColors.statusGreen : AppColors.statusRed,
             ),
           ),
           const SizedBox(width: 4),
@@ -551,9 +557,8 @@ class _MonitoringScreenState extends State<MonitoringScreen>
             style: TextStyle(
               fontSize:   11,
               fontWeight: FontWeight.w600,
-              color: _walkerActive
-                  ? AppColors.statusGreen
-                  : AppColors.statusRed,
+              color:
+                  _walkerActive ? AppColors.statusGreen : AppColors.statusRed,
             ),
           ),
         ],
@@ -873,8 +878,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
           const Divider(height: 20, thickness: 0.8),
           Row(
             children: [
-              Icon(Icons.fence_rounded,
-                  size: 14, color: AppColors.textGrey),
+              Icon(Icons.fence_rounded, size: 14, color: AppColors.textGrey),
               const SizedBox(width: 6),
               Text('Area aman: ',
                   style: TextStyle(
@@ -930,8 +934,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
             ),
           ),
           const SizedBox(width: 10),
-          Text(nama,
-              style: TextStyle(fontSize: 13, color: AppColors.textDark)),
+          Text(nama, style: TextStyle(fontSize: 13, color: AppColors.textDark)),
           const Spacer(),
           Text(aktif ? 'Aktif' : 'Tidak Aktif',
               style: TextStyle(
@@ -1001,8 +1004,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                         fontSize: 13, fontWeight: FontWeight.w600)),
                 subtitle: Text(
                   '${e['date']} • ${e['time']}\n${e['description']}',
-                  style: TextStyle(
-                      fontSize: 11, color: AppColors.textGrey),
+                  style: TextStyle(fontSize: 11, color: AppColors.textGrey),
                 ),
                 isThreeLine: true,
                 onTap: () => ScaffoldMessenger.of(context).showSnackBar(

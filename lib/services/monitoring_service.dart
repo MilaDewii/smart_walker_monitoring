@@ -1,11 +1,11 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
+import 'dart:async';
 import '../models/walker_data.dart';
+import '../models/alert_model.dart';
 import 'history_service.dart';
 import 'notification_service.dart';
-import '../models/alert_model.dart';
-import 'dart:async';
 
 class MonitoringService {
   MonitoringService._();
@@ -27,8 +27,10 @@ class MonitoringService {
         .onValue
         .map((event) {
       if (event.snapshot.value == null) return WalkerData.empty();
+
       final raw = event.snapshot.value;
       if (raw is! Map) return WalkerData.empty();
+
       return _parse(Map<dynamic, dynamic>.from(raw));
     });
   }
@@ -234,14 +236,15 @@ class MonitoringService {
 
     // Langkah
     final activity = _asMap(data['activity']);
-    final langkah  = _toInt(activity['langkah'], 0)
-                   + _toInt(activity['steps'],   0);
+
+    final langkah =
+        _toInt(activity['langkah'], 0) + _toInt(activity['steps'], 0);
 
     // ultrasonicBack: true jika user_detected = true
-    final hcsrBack     = _asMap(sensors['hcsr04_back']);
-    final hcsrFront    = _asMap(sensors['hcsr04_front']);
-    final ultraBack    = hcsrBack['user_detected']      == true;
-    final ultraFront   = hcsrFront['obstacle_detected'] == true;
+    final hcsrBack   = _asMap(sensors['hcsr04_back']);
+    final hcsrFront  = _asMap(sensors['hcsr04_front']);
+    final ultraBack  = hcsrBack['user_detected']      == true;
+    final ultraFront = hcsrFront['obstacle_detected'] == true;
 
     return WalkerData(
       position:        LatLng(lat, lng),
@@ -282,8 +285,12 @@ class MonitoringService {
 
   double _rad(double deg) => deg * math.pi / 180;
 
-  Map<dynamic, dynamic> _asMap(dynamic v) =>
-      v is Map ? Map<dynamic, dynamic>.from(v) : {};
+  Map<dynamic, dynamic> _asMap(dynamic v) {
+    if (v is Map) {
+      return Map<dynamic, dynamic>.from(v);
+    }
+    return {};
+  }
 
   double _toDouble(dynamic v, double fallback) {
     if (v is num)    return v.toDouble();
