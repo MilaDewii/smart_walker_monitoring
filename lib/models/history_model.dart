@@ -110,6 +110,7 @@ class HistoryItem {
   final String subtitle;
   final String date;
   final String time;
+  final DateTime? rawTimestamp;
   final HistoryStatus status;
   final HistoryCategory category;
   final IconData icon;
@@ -122,6 +123,7 @@ class HistoryItem {
     required this.subtitle,
     required this.date,
     required this.time,
+    this.rawTimestamp,
     required this.status,
     required this.category,
     required this.icon,
@@ -133,6 +135,7 @@ class HistoryItem {
     final ts = raw['timestamp']?.toString() ?? '';
     final datePart = _parseDate(ts);
     final timePart = _parseTime(ts);
+    final parsedTs = DateTime.tryParse(ts.replaceAll(' ', 'T'));
 
     final statusStr = (raw['status']?.toString() ?? '').toLowerCase();
     final status = _parseStatus(statusStr);
@@ -147,9 +150,13 @@ class HistoryItem {
       category = HistoryCategory.jatuh;
     } else if (catStr == 'geofence' || catStr.contains('geofence')) {
       category = HistoryCategory.geofence;
-    } else if (sensorField.contains('belakang') || catStr.contains('belakang')) {
+    } else if (sensorField.contains('belakang') ||
+        sensorField.contains('back') ||
+        catStr.contains('belakang')) {
       category = HistoryCategory.hambatanBelakang;
-    } else if (sensorField.contains('depan') || catStr.contains('depan')) {
+    } else if (sensorField.contains('depan') ||
+        sensorField.contains('front') ||
+        catStr.contains('depan')) {
       category = HistoryCategory.hambatanDepan;
     } else if (catStr.contains('aktivitas')) {
       category = HistoryCategory.aktivitas;
@@ -357,6 +364,7 @@ class HistoryItem {
       subtitle: subtitle,
       date: datePart,
       time: timePart,
+      rawTimestamp: parsedTs,
       status: status,
       category: category,
       icon: _iconOf(category),
@@ -403,6 +411,7 @@ class HistoryItem {
     }
 
     final createdAt = data['created_at']?.toString() ?? '';
+    final parsedTs = DateTime.tryParse(createdAt.replaceAll(' ', 'T'));
 
     return HistoryItem(
       id: data['id'].toString(),
@@ -410,6 +419,7 @@ class HistoryItem {
       subtitle: data['subtitle'] ?? '',
       date: _parseDate(createdAt),
       time: _parseTime(createdAt),
+      rawTimestamp: parsedTs,
       status: status,
       category: category,
       icon: _iconOf(category),
@@ -419,8 +429,12 @@ class HistoryItem {
   }
 
   static HistoryStatus _parseStatus(String s) {
-    if (s == 'danger' || s == 'bahaya') return HistoryStatus.bahaya;
-    if (s == 'warning' || s == 'peringatan') return HistoryStatus.peringatan;
+    if (s == 'danger' || s == 'bahaya' || s == 'darurat') {
+      return HistoryStatus.bahaya;
+    }
+    if (s == 'warning' || s == 'peringatan' || s == 'waspada') {
+      return HistoryStatus.peringatan;
+    }
     if (s == 'info') return HistoryStatus.info;
     return HistoryStatus.aman;
   }
@@ -456,13 +470,14 @@ class HistoryItem {
   static IconData _iconOf(HistoryCategory cat) {
     switch (cat) {
       case HistoryCategory.jatuh:
-        return Icons.personal_injury_rounded;
+        return Icons
+            .accessibility_new_rounded; // sama kayak notif level darurat
       case HistoryCategory.geofence:
-        return Icons.location_off_rounded;
+        return Icons.warning_amber_rounded; // sama kayak notif level tinggi
       case HistoryCategory.hambatanBelakang:
-        return Icons.sensors_rounded;
+        return Icons.directions_walk_rounded; // sama kayak notif level waspada
       case HistoryCategory.hambatanDepan:
-        return Icons.warning_amber_rounded;
+        return Icons.directions_walk_rounded; // sama kayak notif level waspada
       case HistoryCategory.aktivitas:
         return Icons.directions_walk_rounded;
       case HistoryCategory.walker:

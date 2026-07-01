@@ -22,9 +22,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _calibUltrasonic = false;
   bool _calibGPS = false;
 
-  // ── 2. THRESHOLD ─────────────────────────────────────
-  double _warningThreshold = 0.7;
-  double _dangerThreshold = 1.0;
+  // ── 2. THRESHOLD (READ-ONLY — ditentukan oleh Fuzzy Logic ESP32) ──
+  // Nilai ini HANYA untuk ditampilkan sebagai referensi.
+  // Fuzzy Inference System (4 input: peakImpact, peakGyro, azFiltered,
+  // diamDetik) dengan 9 rule dan defuzzifikasi Weighted Average
+  // (centroid AMAN=0.15, WASPADA=0.50, BAHAYA=0.90) berjalan di firmware
+  // ESP32, BUKAN di aplikasi. Slider di bawah sengaja dikunci agar
+  // integritas akademik/fuzzy purity tetap terjaga.
+  static const double _warningThreshold = 0.30; // referensi: ambang WASPADA (fuzzy_risk)
+  static const double _dangerThreshold = 0.45;  // referensi: FALL_FUZZY_THRESHOLD (fuzzy_risk >= ini = jatuh)
 
   // ── 3. NOTIFICATION ──────────────────────────────────
   bool _alertSound = true;
@@ -32,11 +38,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _soundMode = 'Normal'; // Normal | Silent | Loud
 
   // ── 4. PAIR DEVICE — handled via dialog ──────────────
-
-  // ── 6. CONNECTION ─────────────────────────────────────
-  // final bool _wifiStatus = true;
-  // final bool _bluetoothStatus = true;
-  // final bool _sim808Status = false;
 
   // ── 7. EMERGENCY CONTACT ─────────────────────────────
   int? _emergencyId;
@@ -77,11 +78,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (settings != null) {
       setState(() {
-
-        _warningThreshold = (settings['warning_threshold'] ?? 0.7).toDouble();
-
-        _dangerThreshold = (settings['danger_threshold'] ?? 1.0).toDouble();
-
+        // Threshold TIDAK di-load dari DB lagi — nilainya fixed (referensi fuzzy)
         _calibMPU = (settings['mpu6050_calibration'] ?? 0) == 1;
 
         _calibUltrasonic = (settings['ultrasonic_calibration'] ?? 0) == 1;
@@ -277,85 +274,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Widget _buildPresetChip(String label, double value) {
-  //   return Expanded(
-  //     child: GestureDetector(
-  //       child: Container(
-  //         padding: const EdgeInsets.symmetric(vertical: 8),
-  //         decoration: BoxDecoration(
-  //           color: selected
-  //               ? AppColors.statusGreen
-  //               : AppColors.statusGreen.withOpacity(0.08),
-  //           borderRadius: BorderRadius.circular(8),
-  //           border: Border.all(
-  //             color: selected
-  //                 ? AppColors.statusGreen
-  //                 : AppColors.statusGreen.withOpacity(0.2),
-  //           ),
-  //         ),
-  //         child: Text(
-  //           label,
-  //           textAlign: TextAlign.center,
-  //           style: TextStyle(
-  //               fontSize: 12,
-  //               fontWeight: FontWeight.w600,
-  //               color: selected ? Colors.white : AppColors.statusGreen),
-  //         ),
-  //       ),
-  //     ),
-  //   );
-  // }
-
-  // ── 2. THRESHOLD SETTING ─────────────────────────────
+  // ── 2. THRESHOLD SETTING (FROZEN / READ-ONLY) ────────
   Widget _buildThreshold() {
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle(
-              'Threshold Setting', Icons.tune, AppColors.statusYellow),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSectionTitle(
+                    'Threshold Setting', Icons.tune, AppColors.statusYellow),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_outline, size: 12, color: Colors.grey[700]),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Terkunci',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
-          Text('Ambang batas deteksi warning & bahaya',
+          Text('Ambang batas deteksi ditentukan otomatis oleh sistem',
               style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
           const SizedBox(height: 16),
-          // Warning threshold
-          _buildThresholdRow(
+
+          // Warning threshold — read only
+          _buildThresholdRowFrozen(
             label: 'Warning Threshold',
             value: _warningThreshold,
             color: AppColors.statusYellow,
             icon: Icons.warning_amber_rounded,
-            min: 0.1,
-            max: 0.9,
-            onChanged: (v) {
-              if (v < _dangerThreshold) {
-                setState(() {
-                  _warningThreshold = v;
-                });
-
-                _saveSettings();
-              }
-            },
           ),
           const SizedBox(height: 16),
-          // Danger threshold
-          _buildThresholdRow(
+
+          // Danger threshold — read only
+          _buildThresholdRowFrozen(
             label: 'Danger Threshold',
             value: _dangerThreshold,
             color: AppColors.statusRed,
             icon: Icons.dangerous_outlined,
-            min: 0.5,
-            max: 2.0,
-            onChanged: (v) {
-              if (v > _warningThreshold) {
-                setState(() {
-                  _dangerThreshold = v;
-                });
-                _saveSettings();
-              }
-            },
           ),
           const SizedBox(height: 12),
-          // Info hint
+
+          // Info hint — dijelaskan kenapa dikunci
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -363,12 +342,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.info_outline, color: AppColors.primary, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Warning < Danger. Sensor akan trigger alert bila nilai melebihi threshold.',
+                    'Nilai ambang batas ini dihitung otomatis oleh sistem Fuzzy Logic '
+                    'pada perangkat walker (4 parameter sensor: benturan, rotasi, '
+                    'orientasi tubuh, dan durasi diam). Nilai tidak dapat diubah manual '
+                    'agar akurasi deteksi jatuh tetap terjaga.',
                     style: TextStyle(fontSize: 11, color: AppColors.textGrey),
                   ),
                 ),
@@ -380,61 +363,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThresholdRow({
+  // Baris threshold versi "beku" — slider nonaktif, cuma nampilin nilai
+  Widget _buildThresholdRowFrozen({
     required String label,
     required double value,
     required Color color,
     required IconData icon,
-    required double min,
-    required double max,
-    required ValueChanged<double> onChanged,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(label,
+    return Opacity(
+      opacity: 0.55,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(label,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDark)),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  value.toStringAsFixed(2),
                   style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark)),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(8),
+                      fontSize: 14, fontWeight: FontWeight.bold, color: color),
+                ),
               ),
-              child: Text(
-                value.toStringAsFixed(2),
-                style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.bold, color: color),
+            ],
+          ),
+          const SizedBox(height: 6),
+          IgnorePointer(
+            ignoring: true,
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: color,
+                inactiveTrackColor: color.withOpacity(0.2),
+                thumbColor: color,
+                overlayColor: Colors.transparent,
+                trackHeight: 5,
+              ),
+              child: Slider(
+                value: value,
+                min: 0.0,
+                max: 1.0,
+                onChanged: null, // dikunci — tidak bisa digeser
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            activeTrackColor: color,
-            inactiveTrackColor: color.withOpacity(0.2),
-            thumbColor: color,
-            overlayColor: color.withOpacity(0.15),
-            trackHeight: 5,
           ),
-          child: Slider(
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: ((max - min) * 10).toInt(),
-            onChanged: onChanged,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -633,7 +620,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── 4. NOTIFICATION SOUND ────────────────────────────
+  // ── 4. NOTIFICATION SOUND (TETAP AKTIF & BISA DI-SETTING) ──
   Widget _buildNotification() {
     return _buildCard(
       child: Column(
@@ -699,7 +686,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textDark)),
-                      Text('Atur volume alert',
+                      Text('Atur volume & intensitas getar alert',
                           style: TextStyle(
                               fontSize: 11, color: AppColors.textGrey)),
                     ],
@@ -744,6 +731,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       );
                     }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Info kombinasi mode
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, color: AppColors.primary, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Alert Sound & Vibration bisa diaktifkan/dimatikan secara terpisah. '
+                    'Silent/Normal/Loud mengatur seberapa kuat volume dan pola getarnya.',
+                    style: TextStyle(fontSize: 11, color: AppColors.textGrey),
                   ),
                 ),
               ],

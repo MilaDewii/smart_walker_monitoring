@@ -2,19 +2,18 @@
 // ============================================================
 // HISTORY SCREEN — disesuaikan dengan RTD final
 //
-// Perubahan dari versi sebelumnya:
-//  1. StatusSistem: gsmConnected, gpsConnected, imuNormal
-//     (tidak ada battery, tidak ada firebaseRtdConnected)
-//  2. _statusSistem() hanya tampilkan 3 kartu: GSM, GPS, IMU
-//  3. sensorData & distanceData sudah di-parse di model,
-//     screen tidak berubah — langsung pakai item.extra
-//  4. category fallback ke 'type' sudah dihandle di model
-//  5. subtitle / subtittle typo dihandle di model
-//  6. Ditambahkan: _namaLansia, _walkerId dari profile service
+// TAMBAHAN (offline support):
+//  - Pakai connectivity_plus untuk pantau status koneksi.
+//    Saat offline: stream Firebase diganti otomatis dengan
+//    data dari SQLite cache (HistoryService.getCachedHistory()),
+//    yang sudah diisi otomatis tiap kali online sebelumnya.
+//  - Banner kecil muncul di atas list saat lagi offline,
+//    supaya user tahu data yang ditampilkan adalah cache.
 // ============================================================
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../database/database_helper.dart';
 import 'dart:ui' as ui;
 import '../utils/app_colors.dart';
@@ -24,6 +23,7 @@ import '../models/history_model.dart';
 import '../services/history_service.dart';
 import '../services/notification_service.dart';
 import 'dart:io';
+import 'dart:async';
 
 // ── Colors ────────────────────────────────────────────────────
 class _C {
@@ -48,6 +48,10 @@ class _C {
   static const Color infoText = Color(0xFF3B82F6);
   static const Color infoBg = Color(0xFFEFF6FF);
   static const Color infoBorder = Color(0xFFBFDBFE);
+
+  static const Color offlineText = Color(0xFF92400E);
+  static const Color offlineBg = Color(0xFFFEF3C7);
+  static const Color offlineBorder = Color(0xFFFBBF24);
 }
 
 // ── Screen ────────────────────────────────────────────────────
@@ -60,7 +64,6 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   bool _hasOpenedDetail = false;
-  // ── State: nama lansia & walker ───────────────────────────
   String _namaLansia = 'Nama Lansia';
   String _namaUser = 'User';
   File? _fotoFile;
@@ -74,6 +77,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _sortOption = 'Terbaru';
   String _searchQuery = '';
 
+  // ── Konektivitas ────────────────────────────────────────
+  bool _isOffline = false;
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
+
+  // ── Data cache (dipakai saat offline) ────────────────────
+  List<HistoryItem> _cachedItems = [];
+  bool _loadingCache = false;
+
   final List<Map<String, dynamic>> _tabs = [
     {'label': 'Semua', 'icon': Icons.history_rounded},
     {'label': 'Jatuh', 'icon': Icons.personal_injury_rounded},
@@ -86,6 +97,48 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+    _initConnectivity();
+  }
+
+  @override
+  void dispose() {
+    _connSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initConnectivity() async {
+    final initial = await Connectivity().checkConnectivity();
+    _updateOfflineState(initial);
+
+    _connSub = Connectivity().onConnectivityChanged.listen(_updateOfflineState);
+  }
+
+  void _updateOfflineState(List<ConnectivityResult> results) {
+    final offline =
+        results.isEmpty || results.every((r) => r == ConnectivityResult.none);
+
+    if (!mounted) return;
+    setState(() => _isOffline = offline);
+
+    if (offline) {
+      _loadCache();
+    }
+  }
+
+  Future<void> _loadCache() async {
+    if (_walkerId == null) return;
+    setState(() => _loadingCache = true);
+    try {
+      final items = await _service.getCachedHistory();
+      if (!mounted) return;
+      setState(() {
+        _cachedItems = items;
+        _loadingCache = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingCache = false);
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -95,7 +148,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
       final walkerId = pairedWalkers.isNotEmpty
           ? pairedWalkers.first['walker_id']?.toString()
-          : null; // ◄ null kalau belum pairing
+          : null;
 
       if (!mounted) return;
       setState(() {
@@ -111,10 +164,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
         }
       });
 
-      if (_walkerId == null) return; // ◄ stop kalau belum pairing
+      if (_walkerId == null) return;
       _service = HistoryService(walkerId: _walkerId!);
-      _historyStream = _service.historyStream();
+      // .asBroadcastStream() WAJIB di sini: StreamBuilder bisa saja
+      // mencoba listen ulang ke stream yang sama saat widget rebuild
+      // (misal saat status online/offline berganti cepat). Stream
+      // bawaan dari Firebase bersifat single-subscription — kalau
+      // sudah pernah di-listen lalu dicoba listen lagi, Dart akan
+      // melempar "Bad state: Stream has already been listened to."
+      // Broadcast stream mengizinkan banyak listener tanpa error itu.
+      _historyStream = _service.historyStream().asBroadcastStream();
       _notifService = NotificationService(walkerId: _walkerId!);
+
+      if (_isOffline) _loadCache();
     } catch (e) {
       if (!mounted) return;
       _service = HistoryService(walkerId: 'walker_001');
@@ -194,7 +256,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Jika service belum siap (profile sedang loading)
     if (_walkerId == null) {
       return const Scaffold(
         backgroundColor: Color(0xFFF0F4F8),
@@ -217,88 +278,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     topRight: Radius.circular(24),
                   ),
                 ),
-                child: StreamBuilder<List<HistoryItem>>(
-                  stream: _historyStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(color: _C.primary),
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.wifi_off_rounded,
-                                size: 40, color: _C.textMid),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Gagal memuat data\n${snapshot.error}',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  fontSize: 12, color: _C.textMid),
-                            ),
-                            const SizedBox(height: 12),
-                            TextButton(
-                              onPressed: () => setState(() {}),
-                              child: const Text('Coba Lagi'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    final allItems = snapshot.data ?? [];
-
-                    if (!_hasOpenedDetail &&
-                        widget.openHistoryId != null &&
-                        allItems.isNotEmpty) {
-                      final matched = allItems.where(
-                        (item) => item.id == widget.openHistoryId,
-                      );
-
-                      if (matched.isNotEmpty) {
-                        _hasOpenedDetail = true;
-
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          showModalBottomSheet(
-                            context: context,
-                            backgroundColor: Colors.transparent,
-                            isScrollControlled: true,
-                            useSafeArea: true,
-                            builder: (_) => _DetailSheet(
-                              item: matched.first,
-                            ),
-                          );
-                        });
-                      }
-                    }
-                    final filtered = _applyFilter(allItems);
-                    final groupedItems = _grouped(filtered);
-
-                    return SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _summaryRow(allItems.length),
-                          const SizedBox(height: 12),
-                          _searchBar(),
-                          const SizedBox(height: 12),
-                          _categoryTabs(),
-                          const SizedBox(height: 14),
-                          if (filtered.isEmpty)
-                            _emptyState()
-                          else
-                            ...groupedItems.entries
-                                .map((e) => _dateSection(e.key, e.value)),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                child: _isOffline ? _buildOfflineBody() : _buildOnlineBody(),
               ),
             ),
           ],
@@ -307,7 +287,128 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  // ── Top bar ───────────────────────────────────────────────
+  Widget _buildOnlineBody() {
+    return StreamBuilder<List<HistoryItem>>(
+      stream: _historyStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: _C.primary),
+          );
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off_rounded,
+                    size: 40, color: _C.textMid),
+                const SizedBox(height: 8),
+                Text(
+                  'Gagal memuat data\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, color: _C.textMid),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => setState(() {}),
+                  child: const Text('Coba Lagi'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final allItems = snapshot.data ?? [];
+        return _buildList(allItems, fromCache: false);
+      },
+    );
+  }
+
+  Widget _buildOfflineBody() {
+    if (_loadingCache) {
+      return const Center(
+        child: CircularProgressIndicator(color: _C.primary),
+      );
+    }
+    return _buildList(_cachedItems, fromCache: true);
+  }
+
+  Widget _buildList(List<HistoryItem> allItems, {required bool fromCache}) {
+    if (!_hasOpenedDetail &&
+        widget.openHistoryId != null &&
+        allItems.isNotEmpty) {
+      final matched = allItems.where(
+        (item) => item.id == widget.openHistoryId,
+      );
+
+      if (matched.isNotEmpty) {
+        _hasOpenedDetail = true;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: Colors.transparent,
+            isScrollControlled: true,
+            useSafeArea: true,
+            builder: (_) => _DetailSheet(item: matched.first),
+          );
+        });
+      }
+    }
+    final filtered = _applyFilter(allItems);
+    final groupedItems = _grouped(filtered);
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (fromCache) _offlineBanner(),
+          if (fromCache) const SizedBox(height: 12),
+          _summaryRow(allItems.length),
+          const SizedBox(height: 12),
+          _searchBar(),
+          const SizedBox(height: 12),
+          _categoryTabs(),
+          const SizedBox(height: 14),
+          if (filtered.isEmpty)
+            _emptyState(fromCache: fromCache)
+          else
+            ...groupedItems.entries.map((e) => _dateSection(e.key, e.value)),
+        ],
+      ),
+    );
+  }
+
+  Widget _offlineBanner() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _C.offlineBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _C.offlineBorder),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.wifi_off_rounded, size: 16, color: _C.offlineText),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Sedang offline. Menampilkan riwayat yang tersimpan di perangkat '
+                '— data terbaru akan muncul saat koneksi kembali.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: _C.offlineText,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
   Widget _topBar() => Container(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
         color: const Color(0xFFF0F4F8),
@@ -332,9 +433,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Hallo, $_namaUser',
-                    style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+                  Row(
+                    children: [
+                      Text(
+                        'Hallo, $_namaUser',
+                        style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+                      ),
+                      if (_isOffline) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.wifi_off_rounded,
+                            size: 12, color: _C.offlineText),
+                      ],
+                    ],
                   ),
                   Text(
                     'Monitoring $_namaLansia',
@@ -393,8 +503,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
             PopupMenuButton<String>(
               onSelected: (val) async {
                 if (val == 'Clear All') {
+                  if (_isOffline) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Tidak bisa menghapus riwayat saat offline'),
+                      ),
+                    );
+                    return;
+                  }
                   await _service.clearAllHistory();
-
                   return;
                 }
 
@@ -619,13 +737,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           size: 16,
                         ),
                         itemBuilder: (_) => [
-                          const PopupMenuItem(
+                          PopupMenuItem(
                             value: 'delete',
-                            child: Text('Hapus'),
+                            enabled: !_isOffline,
+                            child: Text(
+                              _isOffline ? 'Hapus (perlu online)' : 'Hapus',
+                            ),
                           )
                         ],
                         onSelected: (value) async {
-                          if (value == 'delete') {
+                          if (value == 'delete' && !_isOffline) {
                             await _service.deleteHistory(item.id);
                           }
                         },
@@ -686,7 +807,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _emptyState() => Padding(
+  Widget _emptyState({bool fromCache = false}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Center(
           child: Column(children: [
@@ -700,11 +821,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   size: 32, color: _C.primary),
             ),
             const SizedBox(height: 12),
-            const Text('Tidak ada riwayat',
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: _C.textDark)),
+            Text(
+              fromCache
+                  ? 'Belum ada riwayat tersimpan di perangkat'
+                  : 'Tidak ada riwayat',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _C.textDark),
+            ),
           ]),
         ),
       );
@@ -932,7 +1058,6 @@ class _DetailSheet extends StatelessWidget {
         ? (jarak > threshold ? _C.bahayaText : _C.amanText)
         : (jarak < threshold ? _C.warnText : _C.amanText);
 
-// Override warna kalau status eksplisit dari Firebase
     final String statusLower = (e.hcsrStatus ?? '').toLowerCase();
     final Color finalStatusColor = statusLower.contains('tidak terdeteksi')
         ? (item.status == HistoryStatus.bahaya ? _C.bahayaText : _C.warnText)
@@ -1001,12 +1126,12 @@ class _DetailSheet extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-                fontSize: 13, // ◄ kecilkan dari 16 → 13
+                fontSize: 13,
                 fontWeight: FontWeight.bold,
                 color: color),
             textAlign: TextAlign.center,
-            maxLines: 2, // ◄ max 2 baris
-            overflow: TextOverflow.ellipsis, // ◄ kalau masih panjang, ellipsis
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(
@@ -1025,9 +1150,9 @@ class _DetailSheet extends StatelessWidget {
       title: 'Jarak Sensor (Belakang & Depan)',
       child: ClipRect(
         child: Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 4), // ◄ TAMBAH INI
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
           child: SizedBox(
-            height: 160, // ◄ naikkan sedikit supaya grafik muat
+            height: 160,
             child: CustomPaint(
               painter: _DistanceChartPainter(
                 data: item.extra.distanceData,
@@ -1274,7 +1399,6 @@ class _DetailSheet extends StatelessWidget {
     );
   }
 
-  // ── Status Sistem — 3 kartu: GSM, GPS, IMU (tanpa battery) ──
   Widget _statusSistem() {
     final ss = item.extra.statusSistem!;
     return _card(

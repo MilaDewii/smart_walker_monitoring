@@ -19,7 +19,6 @@ import 'screens/location_screen.dart';
 import 'screens/geofence_setup_screen.dart';
 import 'services/onesignal_handler.dart';
 import 'services/monitoring_service.dart';
-import 'services/monitoring_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
