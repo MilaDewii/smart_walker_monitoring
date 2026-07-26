@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../database/database_helper.dart';
@@ -55,6 +56,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   StreamSubscription<List<AlertItem>>? _walkerSub;
   List<AlertItem> _alerts = [];
 
+  // ── Offline cache state ─────────────────────────────────
+  bool _isOffline = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+
   bool   _isLoading        = true;
   String _errorMsg         = '';
   String _selectedFilter   = 'Semua';
@@ -77,6 +82,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   void dispose() {
     _searchCtrl.dispose();
     _walkerSub?.cancel();
+    _connectivitySub?.cancel();
     super.dispose();
   }
 
@@ -111,26 +117,46 @@ class _NotificationScreenState extends State<NotificationScreen> {
       }
 
       _service = NotificationService(walkerId: walkerId);
-      await _service!.saveOneSignalId();
 
-      _walkerSub = _service!.watchNotifications().listen(
-        (items) {
-          if (mounted) {
-            setState(() {
-              _alerts = items;
-              _isLoading = false;
-            });
-          }
-        },
-        onError: (e) {
-          if (mounted) {
-            setState(() {
-              _isLoading = false;
-              _errorMsg = 'Gagal memuat notifikasi: $e';
-            });
-          }
-        },
+      // ── FIX: jangan await FCM token di sini — kalau internet mati/lambat,
+      //    ini bisa nge-block loading screen tanpa batas waktu.
+      //    Biarkan jalan di background dengan timeout, dan JANGAN nge-block.
+      unawaited(
+        _service!.saveFCMToken().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint('[FCM] saveFCMToken timeout, skip');
+          },
+        ).catchError((e) {
+          debugPrint('[FCM] saveFCMToken gagal: $e');
+        }),
       );
+
+      // ── FIX: coba fetch langsung ke Firebase (dengan timeout),
+      //    jangan cuma andalkan connectivity_plus yang cuma tau
+      //    ada-tidaknya interface, bukan internet beneran nyambung.
+      final online = await _tryInitialFetch();
+      if (!online) {
+        setState(() => _isOffline = true);
+        await _loadFromCache();
+      }
+
+      // ── Pantau perubahan koneksi selama layar ini aktif ──
+      _connectivitySub =
+          Connectivity().onConnectivityChanged.listen((results) async {
+        final bool hasNetwork = _hasConnection(results);
+
+        if (hasNetwork && _isOffline) {
+          // Koneksi kembali → lanjutkan mendengarkan Firebase lagi
+          _subscribeFirebase();
+        } else if (!hasNetwork && !_isOffline) {
+          // Koneksi putus → beralih ke data cache SQLite
+          _walkerSub?.cancel();
+          _walkerSub = null;
+          setState(() => _isOffline = true);
+          await _loadFromCache();
+        }
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -138,6 +164,77 @@ class _NotificationScreenState extends State<NotificationScreen> {
           _errorMsg = 'Terjadi kesalahan: $e';
         });
       }
+    }
+  }
+
+  // ── Coba ambil data sekali langsung dari Firebase (timeout pendek) ──
+  Future<bool> _tryInitialFetch() async {
+    if (_service == null) return false;
+    try {
+      final items = await _service!
+          .fetchNotifications()
+          .timeout(const Duration(seconds: 5));
+      if (!mounted) return false;
+      setState(() {
+        _alerts    = items;
+        _isLoading = false;
+        _isOffline = false;
+      });
+      await _service!.cacheNotifications(items);
+      _subscribeFirebase(); // lanjut listen realtime setelah fetch awal sukses
+      return true;
+    } catch (e) {
+      debugPrint('[NotifScreen] initial fetch gagal, fallback ke cache: $e');
+      return false;
+    }
+  }
+
+  bool _hasConnection(List<ConnectivityResult> results) {
+    return results.any((r) => r != ConnectivityResult.none);
+  }
+
+  // ── Mendengarkan Firebase (mode online) ─────────────────
+  void _subscribeFirebase() {
+    if (_service == null) return;
+
+    _walkerSub?.cancel();
+    _walkerSub = _service!.watchNotifications().listen(
+      (items) async {
+        if (mounted) {
+          setState(() {
+            _alerts = items;
+            _isLoading = false;
+            _isOffline = false;
+          });
+        }
+        // Update cache SQLite setiap ada perubahan dari Firebase
+        await _service!.cacheNotifications(items);
+      },
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMsg = 'Gagal memuat notifikasi: $e';
+          });
+        }
+      },
+    );
+  }
+
+  // ── Ambil data terakhir dari SQLite (mode offline) ──────
+  Future<void> _loadFromCache() async {
+    if (_service == null) return;
+    try {
+      final cached = await _service!.getCachedNotifications();
+      if (mounted) {
+        setState(() {
+          _alerts = cached;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[NotifScreen] gagal load cache: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -172,19 +269,21 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _markAllRead() async {
-    if (_service == null) return;
+    if (_service == null || _isOffline) return;
     await _service!.markAllAsRead(_alerts);
   }
 
   // ── Buka detail: hanya tandai sudahDibaca (titik merah hilang)
   //    TIDAK otomatis tandai aman — user harus klik sendiri
   Future<void> _openDetail(AlertItem item) async {
-    await _service?.markAsRead(item.id);
+    if (!_isOffline) {
+      await _service?.markAsRead(item.id);
+    }
     if (!mounted) return;
 
     // Cari history yang relevan berdasarkan timestamp notifikasi
     HistoryItem? historyItem;
-    if (_walkerId != null) {
+    if (_walkerId != null && !_isOffline) {
       try {
         final historyService = HistoryService(walkerId: _walkerId!);
         historyItem = await historyService.findByNotification(
@@ -209,6 +308,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           fotoFile:    _fotoFile,
           service:     _service!,
           historyItem: historyItem,
+          isOffline:   _isOffline,
         ),
       ),
     );
@@ -257,8 +357,37 @@ class _NotificationScreenState extends State<NotificationScreen> {
       child: Column(
         children: [
           const SizedBox(height: 12),
+          if (_isOffline) _buildOfflineBanner(),
+          if (_isOffline) const SizedBox(height: 12),
           _buildNotificationCard(),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3CD),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _C.waspadaText.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 16, color: _C.waspadaText),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Sedang offline, menampilkan data terakhir yang tersinkron.',
+              style: TextStyle(
+                fontSize: 11,
+                color: _C.waspadaText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -432,11 +561,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 Container(
                     width: 6,
                     height: 6,
-                    decoration: const BoxDecoration(
-                        color: Color(0xFF4ADE80), shape: BoxShape.circle)),
+                    decoration: BoxDecoration(
+                        color: _isOffline
+                            ? const Color(0xFFF87171)
+                            : const Color(0xFF4ADE80),
+                        shape: BoxShape.circle)),
                 const SizedBox(width: 4),
-                const Text('Live',
-                    style: TextStyle(
+                Text(_isOffline ? 'Offline' : 'Live',
+                    style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.w600)),
@@ -756,6 +888,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
           color: _C.amanText,
           bg: _C.amanBg,
           onTap: () async {
+            // Aksi tulis ke Firebase hanya diizinkan saat online
+            if (_isOffline) return;
             // ── FIX: panggil markAsSafe, bukan markAsRead
             if (!sudahAman) await _service?.markAsSafe(item.id);
           },
@@ -1055,6 +1189,7 @@ class NotificationDetailScreen extends StatefulWidget {
   final File? fotoFile;
   final NotificationService service;
   final HistoryItem? historyItem;
+  final bool isOffline;
 
   const NotificationDetailScreen({
     super.key,
@@ -1064,6 +1199,7 @@ class NotificationDetailScreen extends StatefulWidget {
     required this.fotoFile,
     required this.service,
     this.historyItem,
+    this.isOffline = false,
   });
 
   @override
@@ -1110,6 +1246,19 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   // ── FIX: panggil markAsSafe, bukan markAsRead
   Future<void> _tandaiAman() async {
     if (_sudahAman) return;
+    if (widget.isOffline) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tidak bisa menandai aman saat offline',
+                style: TextStyle(fontSize: 13)),
+            backgroundColor: _C.waspadaText,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
     await widget.service.markAsSafe(widget.item.id);
     if (mounted) setState(() => _sudahAman = true);
     if (mounted) {
@@ -1512,6 +1661,32 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.isOffline)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.cloud_off_rounded,
+                        size: 13, color: _C.waspadaText),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Sedang offline — beberapa aksi hanya tersedia saat online.',
+                        style: TextStyle(
+                            fontSize: 11, color: _C.waspadaText, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           const Text('Apa yang ingin kamu lakukan?',
               style: TextStyle(
                   fontSize: 13,

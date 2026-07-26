@@ -1,16 +1,4 @@
 // lib/screens/history_screen.dart
-// ============================================================
-// HISTORY SCREEN — disesuaikan dengan RTD final
-//
-// TAMBAHAN (offline support):
-//  - Pakai connectivity_plus untuk pantau status koneksi.
-//    Saat offline: stream Firebase diganti otomatis dengan
-//    data dari SQLite cache (HistoryService.getCachedHistory()),
-//    yang sudah diisi otomatis tiap kali online sebelumnya.
-//  - Banner kecil muncul di atas list saat lagi offline,
-//    supaya user tahu data yang ditampilkan adalah cache.
-// ============================================================
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -22,6 +10,9 @@ import '../utils/app_routes.dart';
 import '../models/history_model.dart';
 import '../services/history_service.dart';
 import '../services/notification_service.dart';
+import '../services/geocoding_service.dart';
+import '../services/background_geocode_service.dart'; 
+import 'package:firebase_database/firebase_database.dart';
 import 'dart:io';
 import 'dart:async';
 
@@ -48,6 +39,11 @@ class _C {
   static const Color infoText = Color(0xFF3B82F6);
   static const Color infoBg = Color(0xFFEFF6FF);
   static const Color infoBorder = Color(0xFFBFDBFE);
+
+  // Warna khusus "mendekati batas" — oranye lebih gelap dari warning biasa
+  static const Color nearText = Color(0xFFEA580C);
+  static const Color nearBg = Color(0xFFFFF7ED);
+  static const Color nearBorder = Color(0xFFFDBA74);
 
   static const Color offlineText = Color(0xFF92400E);
   static const Color offlineBg = Color(0xFFFEF3C7);
@@ -77,18 +73,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _sortOption = 'Terbaru';
   String _searchQuery = '';
 
-  // ── Konektivitas ────────────────────────────────────────
+  // ── Konektivitas ────────────────────────────────────────────
   bool _isOffline = false;
   StreamSubscription<List<ConnectivityResult>>? _connSub;
+  StreamSubscription<List<HistoryItem>>? _geocodeSub;
 
-  // ── Data cache (dipakai saat offline) ────────────────────
   List<HistoryItem> _cachedItems = [];
   bool _loadingCache = false;
 
+  // ── Tab filter (Geofence sekarang cover keluar + mendekati) ─
   final List<Map<String, dynamic>> _tabs = [
     {'label': 'Semua', 'icon': Icons.history_rounded},
     {'label': 'Jatuh', 'icon': Icons.personal_injury_rounded},
     {'label': 'Warning', 'icon': Icons.warning_amber_rounded},
+    // "Geofence" sekarang menampilkan KEDUANYA: keluar & mendekati batas
     {'label': 'Geofence', 'icon': Icons.location_off_rounded},
     {'label': 'Sensor', 'icon': Icons.sensors_rounded},
   ];
@@ -103,26 +101,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void dispose() {
     _connSub?.cancel();
+    _geocodeSub?.cancel();   
     super.dispose();
   }
 
   Future<void> _initConnectivity() async {
     final initial = await Connectivity().checkConnectivity();
     _updateOfflineState(initial);
-
     _connSub = Connectivity().onConnectivityChanged.listen(_updateOfflineState);
   }
 
   void _updateOfflineState(List<ConnectivityResult> results) {
     final offline =
         results.isEmpty || results.every((r) => r == ConnectivityResult.none);
-
     if (!mounted) return;
     setState(() => _isOffline = offline);
-
-    if (offline) {
-      _loadCache();
-    }
+    if (offline) _loadCache();
   }
 
   Future<void> _loadCache() async {
@@ -145,7 +139,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     try {
       final profile = await DatabaseHelper.instance.getProfile();
       final pairedWalkers = await DatabaseHelper.instance.getPairedWalkers();
-
       final walkerId = pairedWalkers.isNotEmpty
           ? pairedWalkers.first['walker_id']?.toString()
           : null;
@@ -155,7 +148,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _namaLansia = profile?['nama_lansia']?.toString() ?? _namaLansia;
         _namaUser = profile?['nama']?.toString() ?? 'User';
         _walkerId = walkerId;
-
         final fotoPath = profile?['foto']?.toString() ?? '';
         if (fotoPath.isNotEmpty && File(fotoPath).existsSync()) {
           _fotoFile = File(fotoPath);
@@ -166,35 +158,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
       if (_walkerId == null) return;
       _service = HistoryService(walkerId: _walkerId!);
-      // .asBroadcastStream() WAJIB di sini: StreamBuilder bisa saja
-      // mencoba listen ulang ke stream yang sama saat widget rebuild
-      // (misal saat status online/offline berganti cepat). Stream
-      // bawaan dari Firebase bersifat single-subscription — kalau
-      // sudah pernah di-listen lalu dicoba listen lagi, Dart akan
-      // melempar "Bad state: Stream has already been listened to."
-      // Broadcast stream mengizinkan banyak listener tanpa error itu.
       _historyStream = _service.historyStream().asBroadcastStream();
       _notifService = NotificationService(walkerId: _walkerId!);
-
+      _geocodeSub = _historyStream.listen((items) {
+        if (!_isOffline && _walkerId != null) {
+          BackgroundGeocodeService.instance.scanAndQueue(items, _walkerId!);
+        }
+      });
       if (_isOffline) _loadCache();
     } catch (e) {
       if (!mounted) return;
       _service = HistoryService(walkerId: 'walker_001');
-    }
-  }
-
-  int _parseTimeToMinutes(String time) {
-    try {
-      final parts = time.split(' ');
-      final hm = parts[0].split(':');
-      int h = int.parse(hm[0]);
-      final m = int.parse(hm[1]);
-      final isPm = parts[1].toUpperCase() == 'PM';
-      if (isPm && h != 12) h += 12;
-      if (!isPm && h == 12) h = 0;
-      return h * 60 + m;
-    } catch (_) {
-      return 0;
     }
   }
 
@@ -205,10 +179,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
       list = List.from(all);
     } else {
       final catMap = {
-        'Jatuh': [HistoryCategory.jatuh, HistoryCategory.hambatanBelakang],
-        'Warning': [HistoryCategory.aktivitas, HistoryCategory.hambatanDepan],
-        'Geofence': [HistoryCategory.geofence],
-        'Sensor': [HistoryCategory.sensor, HistoryCategory.walker],
+        'Jatuh': [
+          HistoryCategory.jatuh,
+          HistoryCategory.hambatanBelakang,
+        ],
+        'Warning': [
+          HistoryCategory.aktivitas,
+          HistoryCategory.hambatanDepan,
+        ],
+        // Geofence = keluar area (geofence) + mendekati batas (geofenceMendekati)
+        'Geofence': [
+          HistoryCategory.geofence,
+          HistoryCategory.geofenceMendekati,
+        ],
+        'Sensor': [
+          HistoryCategory.sensor,
+          HistoryCategory.walker,
+        ],
       };
       list = all
           .where((h) => (catMap[_selectedCategory] ?? []).contains(h.category))
@@ -229,11 +216,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (_sortOption == 'Terbaru' || _sortOption == 'Terlama') {
       final asc = _sortOption == 'Terlama';
       list.sort((a, b) {
-        final cmpDate = a.date.compareTo(b.date);
-        if (cmpDate != 0) return asc ? cmpDate : -cmpDate;
-        final cmpTime =
-            _parseTimeToMinutes(a.time).compareTo(_parseTimeToMinutes(b.time));
-        return asc ? cmpTime : -cmpTime;
+        final ta = a.rawTimestamp;
+        final tb = b.rawTimestamp;
+        if (ta != null && tb != null) {
+          final cmp = ta.compareTo(tb);
+          return asc ? cmp : -cmp;
+        }
+        if (ta == null && tb == null) return 0;
+        return ta == null ? 1 : -1;
       });
     }
 
@@ -278,7 +268,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     topRight: Radius.circular(24),
                   ),
                 ),
-                child: _isOffline ? _buildOfflineBody() : _buildOnlineBody(),
+                child:
+                    _isOffline ? _buildOfflineBody() : _buildOnlineBody(),
               ),
             ),
           ],
@@ -293,8 +284,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(color: _C.primary),
-          );
+              child: CircularProgressIndicator(color: _C.primary));
         }
         if (snapshot.hasError) {
           return Center(
@@ -307,7 +297,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 Text(
                   'Gagal memuat data\n${snapshot.error}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: _C.textMid),
+                  style:
+                      const TextStyle(fontSize: 12, color: _C.textMid),
                 ),
                 const SizedBox(height: 12),
                 TextButton(
@@ -318,7 +309,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           );
         }
-
         final allItems = snapshot.data ?? [];
         return _buildList(allItems, fromCache: false);
       },
@@ -328,8 +318,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget _buildOfflineBody() {
     if (_loadingCache) {
       return const Center(
-        child: CircularProgressIndicator(color: _C.primary),
-      );
+          child: CircularProgressIndicator(color: _C.primary));
     }
     return _buildList(_cachedItems, fromCache: true);
   }
@@ -338,20 +327,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (!_hasOpenedDetail &&
         widget.openHistoryId != null &&
         allItems.isNotEmpty) {
-      final matched = allItems.where(
-        (item) => item.id == widget.openHistoryId,
-      );
-
+      final matched =
+          allItems.where((item) => item.id == widget.openHistoryId);
       if (matched.isNotEmpty) {
         _hasOpenedDetail = true;
-
         WidgetsBinding.instance.addPostFrameCallback((_) {
           showModalBottomSheet(
             context: context,
             backgroundColor: Colors.transparent,
             isScrollControlled: true,
             useSafeArea: true,
-            builder: (_) => _DetailSheet(item: matched.first),
+            builder: (_) =>
+                _DetailSheet(item: matched.first, walkerId: _walkerId!),
           );
         });
       }
@@ -383,7 +370,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _offlineBanner() => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: _C.offlineBg,
           borderRadius: BorderRadius.circular(12),
@@ -392,17 +380,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.wifi_off_rounded, size: 16, color: _C.offlineText),
+            const Icon(Icons.wifi_off_rounded,
+                size: 16, color: _C.offlineText),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Sedang offline. Menampilkan riwayat yang tersimpan di perangkat '
                 '— data terbaru akan muncul saat koneksi kembali.',
                 style: TextStyle(
-                  fontSize: 11.5,
-                  color: _C.offlineText,
-                  height: 1.4,
-                ),
+                    fontSize: 11.5,
+                    color: _C.offlineText,
+                    height: 1.4),
               ),
             ),
           ],
@@ -417,10 +405,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
             CircleAvatar(
               radius: 24,
               backgroundColor: AppColors.primary.withOpacity(0.15),
-              backgroundImage: _fotoFile != null ? FileImage(_fotoFile!) : null,
+              backgroundImage:
+                  _fotoFile != null ? FileImage(_fotoFile!) : null,
               child: _fotoFile == null
                   ? Text(
-                      _namaUser.isNotEmpty ? _namaUser[0].toUpperCase() : '?',
+                      _namaUser.isNotEmpty
+                          ? _namaUser[0].toUpperCase()
+                          : '?',
                       style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -435,13 +426,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        'Hallo, $_namaUser',
-                        style: TextStyle(fontSize: 12, color: AppColors.textGrey),
-                      ),
+                      Text('Hallo, $_namaUser',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textGrey)),
                       if (_isOffline) ...[
                         const SizedBox(width: 6),
-                        Icon(Icons.wifi_off_rounded,
+                        const Icon(Icons.wifi_off_rounded,
                             size: 12, color: _C.offlineText),
                       ],
                     ],
@@ -476,7 +466,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       );
 
   Widget _summaryRow(int total) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: _C.white,
           borderRadius: BorderRadius.circular(14),
@@ -515,10 +506,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   await _service.clearAllHistory();
                   return;
                 }
-
-                setState(() {
-                  _sortOption = val;
-                });
+                setState(() => _sortOption = val);
               },
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
@@ -534,15 +522,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 _sortMenuItem('Clear All', Icons.delete_forever),
               ],
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(children: [
                   Text(_sortOption,
-                      style: const TextStyle(fontSize: 11, color: _C.textMid)),
+                      style: const TextStyle(
+                          fontSize: 11, color: _C.textMid)),
                   const SizedBox(width: 4),
                   const Icon(Icons.keyboard_arrow_down_rounded,
                       size: 14, color: _C.textMid),
@@ -555,11 +544,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _searchBar() {
     return TextField(
-      onChanged: (value) {
-        setState(() {
-          _searchQuery = value;
-        });
-      },
+      onChanged: (value) => setState(() => _searchQuery = value),
       decoration: InputDecoration(
         hintText: 'Cari riwayat...',
         prefixIcon: const Icon(Icons.search),
@@ -597,7 +582,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         Text(label,
             style: TextStyle(
                 fontSize: 13,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                fontWeight:
+                    isActive ? FontWeight.bold : FontWeight.normal,
                 color: isActive ? iconColor : _C.textDark)),
         if (isActive) ...[
           const Spacer(),
@@ -613,18 +599,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
           children: _tabs.map((tab) {
             final active = _selectedCategory == tab['label'];
             return GestureDetector(
-              onTap: () =>
-                  setState(() => _selectedCategory = tab['label'] as String),
+              onTap: () => setState(
+                  () => _selectedCategory = tab['label'] as String),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.only(right: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: active ? _C.primary : _C.white,
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(
-                      color: active ? _C.primary : const Color(0xFFE2E8F0)),
+                      color: active
+                          ? _C.primary
+                          : const Color(0xFFE2E8F0)),
                   boxShadow: active
                       ? [
                           BoxShadow(
@@ -636,13 +624,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 child: Row(children: [
                   Icon(tab['icon'] as IconData,
-                      size: 13, color: active ? Colors.white : _C.textMid),
+                      size: 13,
+                      color: active ? Colors.white : _C.textMid),
                   const SizedBox(width: 5),
                   Text(tab['label'] as String,
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: active ? Colors.white : _C.textMid)),
+                          color:
+                              active ? Colors.white : _C.textMid)),
                 ]),
               ),
             );
@@ -666,14 +656,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
       );
 
   Widget _historyCard(HistoryItem item) {
-    final sd = _sdOf(item.status);
+    final sd = _sdOf(item.status, item.category);
     return GestureDetector(
       onTap: () => showModalBottomSheet(
         context: context,
         backgroundColor: Colors.transparent,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (_) => _DetailSheet(item: item),
+        builder: (_) => _DetailSheet(item: item, walkerId: _walkerId!),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
@@ -700,7 +690,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                        color: sd.bg, borderRadius: BorderRadius.circular(10)),
+                        color: sd.bg,
+                        borderRadius: BorderRadius.circular(10)),
                     child: Icon(item.icon, size: 20, color: sd.text),
                   ),
                   const SizedBox(width: 10),
@@ -716,7 +707,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         const SizedBox(height: 2),
                         Text(item.subtitle,
                             style: const TextStyle(
-                                fontSize: 11, color: _C.textMid, height: 1.3)),
+                                fontSize: 11,
+                                color: _C.textMid,
+                                height: 1.3)),
                       ],
                     ),
                   ),
@@ -724,25 +717,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        item.time,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: _C.textMid,
-                        ),
-                      ),
+                      Text(item.time,
+                          style: const TextStyle(
+                              fontSize: 11, color: _C.textMid)),
                       PopupMenuButton(
-                        icon: const Icon(
-                          Icons.more_vert,
-                          size: 16,
-                        ),
+                        icon: const Icon(Icons.more_vert, size: 16),
                         itemBuilder: (_) => [
                           PopupMenuItem(
                             value: 'delete',
                             enabled: !_isOffline,
-                            child: Text(
-                              _isOffline ? 'Hapus (perlu online)' : 'Hapus',
-                            ),
+                            child: Text(_isOffline
+                                ? 'Hapus (perlu online)'
+                                : 'Hapus'),
                           )
                         ],
                         onSelected: (value) async {
@@ -752,7 +738,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         },
                       )
                     ],
-                  )
+                  ),
                 ],
               ),
               if (item.meta.isNotEmpty) ...[
@@ -765,18 +751,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       .map((e) => Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                '${e.key}: ',
-                                style: const TextStyle(
-                                    fontSize: 11, color: _C.textMid),
-                              ),
-                              Text(
-                                e.value,
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _C.textDark),
-                              ),
+                              Text('${e.key}: ',
+                                  style: const TextStyle(
+                                      fontSize: 11, color: _C.textMid)),
+                              Text(e.value,
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: _C.textDark)),
                             ],
                           ))
                       .toList(),
@@ -786,8 +768,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: sd.bg,
                     borderRadius: BorderRadius.circular(6),
@@ -835,7 +817,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
       );
 
-  static _StatusDesign _sdOf(HistoryStatus s) {
+  // ── _sdOf sekarang menerima category untuk membedakan mendekati vs keluar ─
+  static _StatusDesign _sdOf(HistoryStatus s, [HistoryCategory? cat]) {
+    // Khusus mendekati batas: gunakan warna oranye meski status "peringatan"
+    if (cat == HistoryCategory.geofenceMendekati) {
+      return _StatusDesign(
+          'MENDEKATI', _C.nearText, _C.nearBg, _C.nearBorder);
+    }
     switch (s) {
       case HistoryStatus.bahaya:
         return _StatusDesign(
@@ -844,10 +832,106 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return _StatusDesign(
             'PERINGATAN', _C.warnText, _C.warnBg, _C.warnBorder);
       case HistoryStatus.aman:
-        return _StatusDesign('NORMAL', _C.amanText, _C.amanBg, _C.amanBorder);
+        return _StatusDesign(
+            'NORMAL', _C.amanText, _C.amanBg, _C.amanBorder);
       case HistoryStatus.info:
-        return _StatusDesign('INFO', _C.infoText, _C.infoBg, _C.infoBorder);
+        return _StatusDesign(
+            'INFO', _C.infoText, _C.infoBg, _C.infoBorder);
     }
+  }
+}
+
+// ============================================================
+// WIDGET NAMA LOKASI -- resolve otomatis via reverse geocoding
+// kalau lokasiNama dari Firebase masih placeholder ("Unknown" /
+// "Koordinat GPS" / kosong). Hasil geocoding disimpan balik ke
+// Firebase supaya kunjungan berikutnya tidak perlu geocode ulang.
+// ============================================================
+class _ResolvedLocationName extends StatefulWidget {
+  final String? initialLokasiNama;
+  final String? lokasiKoordinat;
+  final String historyId;
+  final String walkerId;
+
+  const _ResolvedLocationName({
+    required this.initialLokasiNama,
+    required this.lokasiKoordinat,
+    required this.historyId,
+    required this.walkerId,
+  });
+
+  @override
+  State<_ResolvedLocationName> createState() => _ResolvedLocationNameState();
+}
+
+class _ResolvedLocationNameState extends State<_ResolvedLocationName> {
+  String? _resolvedName;
+  bool _loading = false;
+
+  bool get _needsGeocoding =>
+      GeocodingService.needsGeocoding(widget.initialLokasiNama);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_needsGeocoding && widget.lokasiKoordinat != null) {
+      _resolve();
+    }
+  }
+
+  Future<void> _resolve() async {
+    final coord = GeocodingService.parseCoordString(widget.lokasiKoordinat);
+    if (coord == null) return;
+
+    setState(() => _loading = true);
+
+    final nama = await GeocodingService.getLocationName(coord.lat, coord.lng);
+
+    if (!mounted) return;
+    setState(() {
+      _resolvedName = nama;
+      _loading = false;
+    });
+
+    // Simpan balik ke Firebase supaya history ini permanen punya nama
+    // lokasi asli, tidak perlu geocode ulang tiap kali dibuka lagi.
+    final berhasil = nama != GeocodingService.fallbackNotFound &&
+        nama != GeocodingService.fallbackNoGps;
+    if (berhasil) {
+      FirebaseDatabase.instance
+          .ref('Walkers/${widget.walkerId}/history/${widget.historyId}/lokasiNama')
+          .set(nama)
+          .catchError((_) {
+        // Gagal simpan balik tidak masalah -- nama tetap tampil di layar,
+        // cuma next time bakal geocode ulang.
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String display;
+    if (!_needsGeocoding) {
+      display = widget.initialLokasiNama!;
+    } else if (_loading) {
+      display = 'Memuat nama lokasi...';
+    } else if (_resolvedName != null) {
+      display = _resolvedName!;
+    } else {
+      display = widget.initialLokasiNama ?? '-';
+    }
+
+    return Expanded(
+      child: Text(
+        display,
+        textAlign: TextAlign.right,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: _C.textDark,
+        ),
+      ),
+    );
   }
 }
 
@@ -856,9 +940,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
 // ============================================================
 class _DetailSheet extends StatelessWidget {
   final HistoryItem item;
-  const _DetailSheet({required this.item});
+  final String walkerId;
+  const _DetailSheet({required this.item, required this.walkerId});
 
-  _StatusDesign get sd => _HistoryScreenState._sdOf(item.status);
+  _StatusDesign get sd =>
+      _HistoryScreenState._sdOf(item.status, item.category);
 
   @override
   Widget build(BuildContext context) {
@@ -894,6 +980,12 @@ class _DetailSheet extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 30),
                 children: [
                   _hero(),
+                  // Banner khusus "mendekati batas"
+                  if (item.category ==
+                      HistoryCategory.geofenceMendekati) ...[
+                    const SizedBox(height: 12),
+                    _nearBoundaryBanner(),
+                  ],
                   if (item.category == HistoryCategory.hambatanBelakang &&
                       item.status == HistoryStatus.bahaya) ...[
                     const SizedBox(height: 12),
@@ -971,8 +1063,8 @@ class _DetailSheet extends StatelessWidget {
                           color: sd.text)),
                   const SizedBox(height: 4),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
                         color: sd.text,
                         borderRadius: BorderRadius.circular(16)),
@@ -985,8 +1077,46 @@ class _DetailSheet extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text('${item.date}  ·  ${item.time}',
                       style: TextStyle(
-                          fontSize: 11, color: sd.text.withOpacity(0.7))),
+                          fontSize: 11,
+                          color: sd.text.withOpacity(0.7))),
                 ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  // ── Banner khusus mendekati batas ──────────────────────────
+  Widget _nearBoundaryBanner() => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _C.nearBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _C.nearBorder),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.location_searching_rounded,
+                size: 16, color: _C.nearText),
+            const SizedBox(width: 8),
+            Expanded(
+              child: RichText(
+                text: const TextSpan(
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: _C.nearText,
+                      height: 1.5),
+                  children: [
+                    TextSpan(
+                        text: 'Peringatan dini: ',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextSpan(
+                        text: 'Lansia mendekati batas area aman. '
+                            'Pantau posisi lebih sering dan pastikan '
+                            'lansia tidak melanjutkan keluar area.'),
+                  ],
+                ),
               ),
             ),
           ],
@@ -1010,7 +1140,9 @@ class _DetailSheet extends StatelessWidget {
               child: RichText(
                 text: const TextSpan(
                   style: TextStyle(
-                      fontSize: 12, color: Color(0xFF92400E), height: 1.5),
+                      fontSize: 12,
+                      color: Color(0xFF92400E),
+                      height: 1.5),
                   children: [
                     TextSpan(
                         text: 'Sensor belakang ',
@@ -1060,8 +1192,11 @@ class _DetailSheet extends StatelessWidget {
 
     final String statusLower = (e.hcsrStatus ?? '').toLowerCase();
     final Color finalStatusColor = statusLower.contains('tidak terdeteksi')
-        ? (item.status == HistoryStatus.bahaya ? _C.bahayaText : _C.warnText)
-        : statusLower.contains('terdeteksi') && !statusLower.contains('tidak')
+        ? (item.status == HistoryStatus.bahaya
+            ? _C.bahayaText
+            : _C.warnText)
+        : statusLower.contains('terdeteksi') &&
+                !statusLower.contains('tidak')
             ? _C.amanText
             : statusLower.contains('hambatan')
                 ? _C.warnText
@@ -1072,16 +1207,19 @@ class _DetailSheet extends StatelessWidget {
             ? (jarak > threshold ? 'Tidak Terdeteksi' : 'Terdeteksi')
             : (jarak < threshold ? 'Ada Hambatan' : 'Aman'));
 
-    final String sensorName = isBelakang ? 'HC-SR04 Belakang' : 'HC-SR04 Depan';
+    final String sensorName =
+        isBelakang ? 'HC-SR04 Belakang' : 'HC-SR04 Depan';
 
     return _card(
       title: 'Beat Sonar Pelacak ($sensorName)',
       child: Column(
         children: [
           Row(children: [
+            _sonarCol('Jarak Terukur',
+                '${jarak.toStringAsFixed(0)} cm', _C.textDark),
             _sonarCol(
-                'Jarak Terukur', '${jarak.toStringAsFixed(0)} cm', _C.textDark),
-            _sonarCol('Batas Aman', '≤ ${threshold.toStringAsFixed(0)} cm',
+                'Batas Aman',
+                '≤ ${threshold.toStringAsFixed(0)} cm',
                 _C.warnText),
             _sonarCol('Status', statusText, finalStatusColor),
           ]),
@@ -1090,7 +1228,8 @@ class _DetailSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: jarak > threshold ? _C.bahayaBg : _C.amanBg,
+                color:
+                    jarak > threshold ? _C.bahayaBg : _C.amanBg,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -1098,7 +1237,9 @@ class _DetailSheet extends StatelessWidget {
                 children: [
                   Icon(Icons.info_outline_rounded,
                       size: 14,
-                      color: jarak > threshold ? _C.bahayaText : _C.amanText),
+                      color: jarak > threshold
+                          ? _C.bahayaText
+                          : _C.amanText),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -1106,10 +1247,11 @@ class _DetailSheet extends StatelessWidget {
                           ? 'Jika jarak > ${threshold.toStringAsFixed(0)} cm dan tidak terdeteksi lansia selama lebih dari 5 detik, sistem akan mengindikasikan potensi jatuh.'
                           : 'Lansia terdeteksi dalam jangkauan aman.',
                       style: TextStyle(
-                        fontSize: 11,
-                        height: 1.4,
-                        color: jarak > threshold ? _C.bahayaText : _C.amanText,
-                      ),
+                          fontSize: 11,
+                          height: 1.4,
+                          color: jarak > threshold
+                              ? _C.bahayaText
+                              : _C.amanText),
                     ),
                   ),
                 ],
@@ -1123,29 +1265,26 @@ class _DetailSheet extends StatelessWidget {
 
   Widget _sonarCol(String label, String value, Color color) => Expanded(
         child: Column(children: [
-          Text(
-            value,
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: color),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: color),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10, color: _C.textMid),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          Text(label,
+              style: const TextStyle(fontSize: 10, color: _C.textMid),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
         ]),
       );
 
   Widget _distanceChart() {
-    final isBelakang = item.category == HistoryCategory.hambatanBelakang;
+    final isBelakang =
+        item.category == HistoryCategory.hambatanBelakang;
     return _card(
       title: 'Jarak Sensor (Belakang & Depan)',
       child: ClipRect(
@@ -1177,15 +1316,18 @@ class _DetailSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              _legendLine(const Color(0xFF3B82F6), 'Akselerometer (g)'),
+              _legendLine(
+                  const Color(0xFF3B82F6), 'Akselerometer (g)'),
               const SizedBox(width: 16),
-              _legendLine(const Color(0xFF10B981), 'Gyroscope (°/s)'),
+              _legendLine(
+                  const Color(0xFF10B981), 'Gyroscope (°/s)'),
             ]),
             const SizedBox(height: 10),
             SizedBox(
               height: 150,
               child: CustomPaint(
-                painter: _SensorChartPainter(item.extra.sensorData),
+                painter:
+                    _SensorChartPainter(item.extra.sensorData),
                 size: Size.infinite,
               ),
             ),
@@ -1198,9 +1340,12 @@ class _DetailSheet extends StatelessWidget {
             width: 18,
             height: 3,
             decoration: BoxDecoration(
-                color: c, borderRadius: BorderRadius.circular(2))),
+                color: c,
+                borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 5),
-        Text(label, style: const TextStyle(fontSize: 11, color: _C.textMid)),
+        Text(label,
+            style:
+                const TextStyle(fontSize: 11, color: _C.textMid)),
       ]);
 
   Widget _nilaiTerukur() {
@@ -1227,7 +1372,8 @@ class _DetailSheet extends StatelessWidget {
                                         color: _C.textDark)),
                                 Text(e.key,
                                     style: const TextStyle(
-                                        fontSize: 10, color: _C.textMid)),
+                                        fontSize: 10,
+                                        color: _C.textMid)),
                               ]),
                             ))
                         .toList(),
@@ -1244,7 +1390,8 @@ class _DetailSheet extends StatelessWidget {
       title: 'Ringkasan Sensor Terkait',
       child: Column(children: [
         _sensorRow('HC-SR04 Depan', r.hcsr04Depan, r.statusDepan),
-        _sensorRow('HC-SR04 Belakang', r.hcsr04Belakang, r.statusBelakang),
+        _sensorRow(
+            'HC-SR04 Belakang', r.hcsr04Belakang, r.statusBelakang),
         _sensorRow('IMU (MPU6050)', r.mpu6050, r.statusMpu),
         _sensorRow('Lokasi GPS', r.gpsJarak, r.statusGps),
       ]),
@@ -1262,30 +1409,36 @@ class _DetailSheet extends StatelessWidget {
       child: Row(children: [
         Expanded(
             child: Text(name,
-                style: const TextStyle(fontSize: 12, color: _C.textMid))),
+                style: const TextStyle(
+                    fontSize: 12, color: _C.textMid))),
         Text(value,
             style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w600, color: _C.textDark)),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _C.textDark)),
         const SizedBox(width: 10),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: c.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(status,
               style: TextStyle(
-                  fontSize: 10, fontWeight: FontWeight.bold, color: c)),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: c)),
         ),
       ]),
     );
   }
-
-  Widget _lokasiSection(BuildContext context) {
+Widget _lokasiSection(BuildContext context) {
     final e = item.extra;
     final coord = () {
       try {
-        final parts = (e.lokasiKoordinat ?? '-7.9711,112.6328').split(',');
+        final parts =
+            (e.lokasiKoordinat ?? '-7.9711,112.6328').split(',');
         return LatLng(
           double.parse(parts[0].trim()),
           double.parse(parts[1].trim()),
@@ -1295,20 +1448,40 @@ class _DetailSheet extends StatelessWidget {
       }
     }();
 
-    final Color markerColor;
+    // ── Warna PIN lokasi -- boleh ikut tingkat keparahan event
+    // (jatuh/tidak terdeteksi tetap merah, sebagai penanda "ini kejadian
+    // penting", terlepas dari status geofence-nya).
+    final Color pinColor;
     switch (item.status) {
       case HistoryStatus.bahaya:
-        markerColor = _C.bahayaText;
+        pinColor = _C.bahayaText;
         break;
       case HistoryStatus.peringatan:
-        markerColor = _C.warnText;
+        pinColor = item.category == HistoryCategory.geofenceMendekati
+            ? _C.nearText
+            : _C.warnText;
         break;
       case HistoryStatus.aman:
-        markerColor = _C.amanText;
+        pinColor = _C.amanText;
         break;
       case HistoryStatus.info:
-        markerColor = _C.infoText;
+        pinColor = _C.infoText;
         break;
+    }
+
+    // ── Warna LINGKARAN geofence -- HARUS berdasarkan status geofence
+    // sebenarnya (di dalam/luar area aman), BUKAN ikut tingkat keparahan
+    // event. Jatuh/tidak terdeteksi saat lansia masih di dalam geofence
+    // tetap harus tampil HIJAU di lingkaran ini.
+    final String geoStatus = (e.kondisiGeofence).toLowerCase();
+    final Color geofenceColor;
+    if (geoStatus.contains('luar') || geoStatus.contains('keluar')) {
+      geofenceColor = _C.bahayaText;
+    } else if (geoStatus.contains('dekat') || geoStatus.contains('mendekati')) {
+      geofenceColor = _C.nearText;
+    } else {
+      // "dalam", "aman", "inside", atau status tidak dikenali -> anggap aman
+      geofenceColor = _C.amanText;
     }
 
     return _card(
@@ -1326,8 +1499,7 @@ class _DetailSheet extends StatelessWidget {
                   initialCenter: coord,
                   initialZoom: 15,
                   interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.all,
-                  ),
+                      flags: InteractiveFlag.all),
                 ),
                 children: [
                   TileLayer(
@@ -1339,8 +1511,8 @@ class _DetailSheet extends StatelessWidget {
                     CircleMarker(
                       point: coord,
                       radius: 80,
-                      color: markerColor.withOpacity(0.12),
-                      borderColor: markerColor,
+                      color: geofenceColor.withOpacity(0.12),
+                      borderColor: geofenceColor,
                       borderStrokeWidth: 2,
                       useRadiusInMeter: true,
                     ),
@@ -1351,7 +1523,7 @@ class _DetailSheet extends StatelessWidget {
                       width: 40,
                       height: 40,
                       child: Icon(Icons.location_pin,
-                          color: markerColor, size: 40),
+                          color: pinColor, size: 40),
                     ),
                   ]),
                 ],
@@ -1364,13 +1536,28 @@ class _DetailSheet extends StatelessWidget {
             runSpacing: 4,
             children: [
               Text('Lat: ${coord.latitude.toStringAsFixed(4)}',
-                  style: const TextStyle(fontSize: 11, color: _C.textMid)),
+                  style: const TextStyle(
+                      fontSize: 11, color: _C.textMid)),
               Text('Lng: ${coord.longitude.toStringAsFixed(4)}',
-                  style: const TextStyle(fontSize: 11, color: _C.textMid)),
+                  style: const TextStyle(
+                      fontSize: 11, color: _C.textMid)),
             ],
           ),
           const SizedBox(height: 6),
-          _kvRow('Lokasi', e.lokasiNama ?? '-'),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(children: [
+              const Text('Lokasi',
+                  style: TextStyle(fontSize: 13, color: _C.textMid)),
+              const SizedBox(width: 8),
+              _ResolvedLocationName(
+                initialLokasiNama: e.lokasiNama,
+                lokasiKoordinat: e.lokasiKoordinat,
+                historyId: item.id,
+                walkerId: walkerId,
+              ),
+            ]),
+          ),
           _kvRow('Status Geofence', e.kondisiGeofence),
           if (e.lokasiJarakPusat != null)
             _kvRow('Jarak dari Pusat', e.lokasiJarakPusat!),
@@ -1378,15 +1565,18 @@ class _DetailSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, AppRoutes.location),
-              icon: const Icon(Icons.map_outlined, size: 16, color: _C.primary),
-              label: const Text('Lihat di Google Maps',
+              onPressed: () =>
+                  Navigator.pushNamed(context, AppRoutes.location),
+              icon: const Icon(Icons.map_outlined,
+                  size: 16, color: _C.primary),
+              label: const Text('Lihat Lokasi',
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: _C.primary)),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: _C.primary.withOpacity(0.9)),
+                side: BorderSide(
+                    color: _C.primary.withOpacity(0.9)),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1455,11 +1645,15 @@ class _DetailSheet extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color)),
         const SizedBox(height: 2),
         Text(value,
             style: const TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w600, color: _C.textMid)),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: _C.textMid)),
       ]),
     );
   }
@@ -1493,20 +1687,23 @@ class _DetailSheet extends StatelessWidget {
             backgroundColor: _C.primary,
             foregroundColor: Colors.white,
             elevation: 0,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
           ),
           child: const Text('Kembali ke History',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              style: TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w600)),
         ),
       );
 
-  Widget _kvRow(String k, String v, {bool highlight = false}) => Padding(
+  Widget _kvRow(String k, String v, {bool highlight = false}) =>
+      Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(children: [
           Expanded(
               child: Text(k,
-                  style: const TextStyle(fontSize: 13, color: _C.textMid))),
+                  style: const TextStyle(
+                      fontSize: 13, color: _C.textMid))),
           Text(v,
               style: TextStyle(
                   fontSize: 13,
@@ -1555,7 +1752,7 @@ class _DetailSheet extends StatelessWidget {
 }
 
 // ============================================================
-// CHART PAINTERS
+// CHART PAINTERS (tidak berubah)
 // ============================================================
 class _DistanceChartPainter extends CustomPainter {
   final List<DistanceDataPoint> data;
@@ -1587,24 +1784,28 @@ class _DistanceChartPainter extends CustomPainter {
 
     for (int i = 0; i <= 4; i++) {
       final y = padT + h * i / 4;
-      canvas.drawLine(Offset(padL, y), Offset(padL + w, y), gridPaint);
+      canvas.drawLine(
+          Offset(padL, y), Offset(padL + w, y), gridPaint);
       final val = maxVal - (maxVal - minVal) * i / 4;
       tp.text = TextSpan(
           text: '${val.toStringAsFixed(0)} cm',
-          style: const TextStyle(fontSize: 8, color: Color(0xFFCBD5E1)));
+          style: const TextStyle(
+              fontSize: 8, color: Color(0xFFCBD5E1)));
       tp.layout();
       tp.paint(canvas, Offset(0, y - 5));
     }
 
-    final ty = padT + h * (1 - (threshold - minVal) / (maxVal - minVal));
-    canvas.drawLine(Offset(padL, ty), Offset(padL + w, ty), threshPaint);
+    final ty = padT +
+        h * (1 - (threshold - minVal) / (maxVal - minVal));
+    canvas.drawLine(
+        Offset(padL, ty), Offset(padL + w, ty), threshPaint);
 
     if (data.length < 2) {
       final barW = w / (data.length * 2);
       for (int i = 0; i < data.length; i++) {
         final x = padL + (i * 2 + 0.5) * barW;
-        final yTop =
-            padT + h * (1 - (data[i].distance - minVal) / (maxVal - minVal));
+        final yTop = padT +
+            h * (1 - (data[i].distance - minVal) / (maxVal - minVal));
         final barPaint = Paint()
           ..color = lineColor.withOpacity(0.7)
           ..style = PaintingStyle.fill;
@@ -1615,7 +1816,8 @@ class _DistanceChartPainter extends CustomPainter {
             barPaint);
         tp.text = TextSpan(
             text: data[i].label,
-            style: const TextStyle(fontSize: 8, color: Color(0xFFCBD5E1)));
+            style: const TextStyle(
+                fontSize: 8, color: Color(0xFFCBD5E1)));
         tp.layout();
         tp.paint(canvas,
             Offset(x + barW / 2 - tp.width / 2, size.height - padB + 4));
@@ -1627,7 +1829,8 @@ class _DistanceChartPainter extends CustomPainter {
     for (int i = 0; i < data.length; i++) {
       tp.text = TextSpan(
           text: data[i].label,
-          style: const TextStyle(fontSize: 8, color: Color(0xFFCBD5E1)));
+          style: const TextStyle(
+              fontSize: 8, color: Color(0xFFCBD5E1)));
       tp.layout();
       tp.paint(canvas,
           Offset(padL + stepX * i - tp.width / 2, size.height - padB + 4));
@@ -1678,7 +1881,9 @@ class _DistanceChartPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     for (int i = 0; i < data.length; i++) {
       canvas.drawCircle(
-          Offset(padL + stepX * i, yFor(data[i].distance)), 3.5, dotPaint);
+          Offset(padL + stepX * i, yFor(data[i].distance)),
+          3.5,
+          dotPaint);
     }
   }
 
@@ -1713,7 +1918,8 @@ class _SensorChartPainter extends CustomPainter {
       ..color = const Color(0xFFE2E8F0)
       ..strokeWidth = 1;
     for (int i = 0; i <= 4; i++) {
-      canvas.drawLine(Offset(0, h * i / 4), Offset(w, h * i / 4), gridPaint);
+      canvas.drawLine(
+          Offset(0, h * i / 4), Offset(w, h * i / 4), gridPaint);
     }
 
     double yFor(double val) => h - ((val - minVal) / range) * h;
@@ -1754,15 +1960,17 @@ class _SensorChartPainter extends CustomPainter {
       }
     }
 
-    drawLine(data.map((d) => d.accel).toList(), const Color(0xFF3B82F6));
-    drawLine(data.map((d) => d.gyro).toList(), const Color(0xFF10B981));
+    drawLine(
+        data.map((d) => d.accel).toList(), const Color(0xFF3B82F6));
+    drawLine(
+        data.map((d) => d.gyro).toList(), const Color(0xFF10B981));
   }
 
   @override
   bool shouldRepaint(_SensorChartPainter old) => false;
 }
 
-// ── Status Design ─────────────────────────────────────────────
+// ── Status Design ──────────────────────────────────────────────
 class _StatusDesign {
   final String label;
   final Color text;

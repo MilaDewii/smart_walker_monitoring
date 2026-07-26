@@ -79,6 +79,8 @@ class WalkerData {
     return 'normal';
   }
 
+  
+
   bool get mendekatiGeofence =>
     geofenceStatus == 'inside' &&
     geofenceRadius > 0 &&

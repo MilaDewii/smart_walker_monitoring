@@ -16,6 +16,24 @@
 //     parsing pakai HistoryItem.fromRtd() yang sama, jadi
 //     hasilnya identik dengan versi online (sensorData,
 //     distanceData, statusSistem, dll tetap lengkap).
+//
+// FIX STREAM MACET (starvation):
+//   - Sebelumnya historyStream() pakai pure debounce (Timer
+//     1 detik yang di-reset SETIAP kali ada event baru dari
+//     Firebase). Karena node Walkers/$walkerId berubah terus-
+//     menerus (sensor update tiap ~500ms dari firmware ESP32),
+//     timer itu nyaris TIDAK PERNAH sempat selesai — terus
+//     di-cancel ulang sebelum sempat fire. Akibatnya
+//     controller.add(items) nyaris tidak pernah terpanggil,
+//     sehingga StreamBuilder di UI stuck di data lama (history
+//     baru tidak pernah nongol di list utama, walau data
+//     sebenarnya sudah ada di Firebase — itu sebabnya detail
+//     sheet, yang dibuka lewat fetchOnce()/findByNotification()
+//     terpisah, tetap bisa menampilkan data terbaru).
+//   - Sekarang pakai throttle dengan batas waktu MAKSIMUM:
+//     selain window debounce 1 detik (supaya tidak proses tiap
+//     event satu-satu), kita paksa emit paling lambat tiap 2
+//     detik sekali walau event terus mengalir tanpa henti.
 // ============================================================
 
 import 'dart:convert';
@@ -23,6 +41,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import '../database/database_helper.dart';
 import '../models/history_model.dart';
+import 'dart:async';
 
 class HistoryService {
   final String walkerId;
@@ -48,78 +67,112 @@ class HistoryService {
   // (lihat _lastCachedSignature di atas). Item lama yang datanya
   // sama persis dengan yang sudah di-cache akan di-skip.
   Stream<List<HistoryItem>> historyStream() {
-    // Listen ke seluruh node walker sekaligus supaya bisa
-    // pakai data sim808 / sensors / geofence / location
-    // sebagai konteks untuk setiap history item
-    return FirebaseDatabase.instance
+    final controller = StreamController<List<HistoryItem>>.broadcast();
+    Timer? debounceTimer;
+    DatabaseEvent? pendingEvent;
+    DateTime? lastEmitAt;
+
+    const debounceWindow = Duration(seconds: 1);
+    const maxWait = Duration(seconds: 2);
+
+    void emitNow() {
+      final ev = pendingEvent;
+      if (ev == null) return;
+      lastEmitAt = DateTime.now();
+      final items = _processEvent(ev);
+      if (!controller.isClosed) controller.add(items);
+    }
+
+    final sub = FirebaseDatabase.instance
         .ref('Walkers/$walkerId')
         .onValue
-        .map((event) {
-      if (event.snapshot.value == null) return <HistoryItem>[];
-      final raw = event.snapshot.value;
-      if (raw is! Map) return <HistoryItem>[];
+        .listen((event) {
+      // Simpan event terbaru, tapi TUNDA pemrosesan (debounce),
+      // KECUALI sudah lewat batas waktu maksimum sejak emit
+      // terakhir — dalam kasus itu, emit langsung supaya stream
+      // tidak pernah "starvation" walau event Firebase datang
+      // tanpa henti.
+      pendingEvent = event;
 
-      final walkerData = Map<dynamic, dynamic>.from(raw);
+      final now = DateTime.now();
+      final overdue =
+          lastEmitAt == null || now.difference(lastEmitAt!) >= maxWait;
 
-      // ── Ambil context dari parent walker ──
-      final walkerContext = _buildContext(walkerData);
+      debounceTimer?.cancel();
 
-      // ── Parse history items ──
-      final historyRaw = walkerData['history'];
-      if (historyRaw == null || historyRaw is! Map) return <HistoryItem>[];
-
-      final items = <HistoryItem>[];
-      // Kumpulkan dulu item yang perlu di-cache (yang berubah saja),
-      // baru proses caching-nya terpisah dari loop parsing utama —
-      // supaya loop parsing (yang harus cepat, untuk UI) tidak
-      // tercampur dengan I/O SQLite (yang lebih lambat).
-      final toCache = <MapEntry<String, Map<dynamic, dynamic>>>[];
-
-      for (final entry in (historyRaw as Map).entries) {
-        final id = entry.key.toString();
-        final value = entry.value;
-        if (value is! Map) continue;
-
-        try {
-          // Merge context ke dalam tiap history item
-          final merged = _mergeContext(
-            Map<dynamic, dynamic>.from(value),
-            walkerContext,
-          );
-          items.add(HistoryItem.fromRtd(id, merged));
-
-          // Cek fingerprint: hanya tandai untuk di-cache kalau
-          // datanya berbeda dari yang terakhir kali di-cache.
-          final signature = _quickSignature(merged);
-          if (_lastCachedSignature[id] != signature) {
-            _lastCachedSignature[id] = signature;
-            toCache.add(MapEntry(id, merged));
-          }
-        } catch (e) {
-          debugPrint('[HistoryService] skip $id: $e');
-        }
+      if (overdue) {
+        emitNow();
+      } else {
+        debounceTimer = Timer(debounceWindow, emitNow);
       }
-
-      items.sort((a, b) {
-        final cmpDate = b.date.compareTo(a.date);
-        if (cmpDate != 0) return cmpDate;
-        return b.time.compareTo(a.time);
-      });
-
-      // ── Caching dijalankan async TERPISAH dari return stream ──
-      // Tidak di-await di sini supaya UI dapat data secepatnya.
-      // Karena hanya item yang BENAR-BENAR baru/berubah yang masuk
-      // toCache (biasanya 0-1 item per event, bukan puluhan),
-      // risiko "data belum sempat tersimpan saat force-close"
-      // jauh lebih kecil dibanding sebelumnya, dan tidak akan
-      // membanjiri SQLite dengan write berulang untuk data yang
-      // sama persis.
-      if (toCache.isNotEmpty) {
-        _cacheBatch(toCache);
-      }
-
-      return items;
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
     });
+
+    controller.onCancel = () {
+      debounceTimer?.cancel();
+      sub.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  // Pindahkan isi logic parsing lama (yang tadinya di dalam .map())
+  // ke method terpisah ini supaya bisa dipanggil dari debounce timer:
+  List<HistoryItem> _processEvent(DatabaseEvent event) {
+    if (event.snapshot.value == null) return <HistoryItem>[];
+    final raw = event.snapshot.value;
+    if (raw is! Map) return <HistoryItem>[];
+
+    final walkerData = Map<dynamic, dynamic>.from(raw);
+    final walkerContext = _buildContext(walkerData);
+
+    final historyRaw = walkerData['history'];
+    if (historyRaw == null || historyRaw is! Map) return <HistoryItem>[];
+
+    final items = <HistoryItem>[];
+    final toCache = <MapEntry<String, Map<dynamic, dynamic>>>[];
+
+    for (final entry in (historyRaw as Map).entries) {
+      final id = entry.key.toString();
+      final value = entry.value;
+      if (value is! Map) continue;
+
+      try {
+        final merged = _mergeContext(
+          Map<dynamic, dynamic>.from(value),
+          walkerContext,
+        );
+        items.add(HistoryItem.fromRtd(id, merged));
+
+        final signature = _quickSignature(merged);
+        if (_lastCachedSignature[id] != signature) {
+          _lastCachedSignature[id] = signature;
+          toCache.add(MapEntry(id, merged));
+        }
+      } catch (e) {
+        debugPrint('[HistoryService] skip $id: $e');
+      }
+    }
+
+    items.sort((a, b) {
+      // FIX: sort pakai rawTimestamp (DateTime asli), BUKAN string
+      // date/time hasil format tampilan ("02 Jul 2026"). Membandingkan
+      // string yang diawali angka HARI (bukan tahun) bikin urutan salah
+      // total begitu lewat batas bulan/tahun — item baru bisa "ketumpuk"
+      // di bawah item lama, kelihatan seperti history tidak update.
+      final ta = a.rawTimestamp;
+      final tb = b.rawTimestamp;
+      if (ta != null && tb != null) return tb.compareTo(ta);
+      if (ta == null && tb == null) return 0;
+      return ta == null ? 1 : -1; // yang timestamp-nya null taruh di bawah
+    });
+
+    if (toCache.isNotEmpty) {
+      _cacheBatch(toCache);
+    }
+
+    return items;
   }
 
   // Fingerprint murah (bukan cryptographic hash) untuk mendeteksi
@@ -274,9 +327,13 @@ class HistoryService {
     }
 
     items.sort((a, b) {
-      final cmpDate = b.date.compareTo(a.date);
-      if (cmpDate != 0) return cmpDate;
-      return b.time.compareTo(a.time);
+      // FIX: sama seperti di _processEvent — pakai rawTimestamp,
+      // bukan string date/time hasil format tampilan.
+      final ta = a.rawTimestamp;
+      final tb = b.rawTimestamp;
+      if (ta != null && tb != null) return tb.compareTo(ta);
+      if (ta == null && tb == null) return 0;
+      return ta == null ? 1 : -1;
     });
 
     return items;
@@ -346,7 +403,7 @@ class HistoryService {
         ctx['_ctx_imuNormal'] ?? merged['_ctx_imuNormal'];
 
     // lokasiKoordinat — pakai dari history dulu, fallback ctx
-// kalau history punya koordinat 0,0 (tidak valid), pakai dari ctx
+    // kalau history punya koordinat 0,0 (tidak valid), pakai dari ctx
     final existingKoord = merged['_ctx_lokasiKoordinat']?.toString() ??
         merged['lokasiKoordinat']?.toString();
     final isKoordTidakValid = existingKoord == null ||
@@ -476,7 +533,7 @@ class HistoryService {
     }
   }
 
-// ── Cari history item berdasarkan timestamp + title ────────
+  // ── Cari history item berdasarkan timestamp + title ────────
   Future<HistoryItem?> findByNotification({
     required String timestamp,
     required String title,

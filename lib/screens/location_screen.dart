@@ -22,6 +22,8 @@ class _C {
   static const textMid = AppColors.textGrey;
   static const amanText = AppColors.statusGreen;
   static const amanBg = Color(0xFFDCFCE7);
+  static const waspadaText = AppColors.statusYellow;
+  static const waspadaBg = Color(0xFFFEF3C7);
   static const bahayaText = AppColors.statusRed;
   static const bahayaBg = Color(0xFFFEE2E2);
 }
@@ -176,7 +178,36 @@ class _LocationScreenState extends State<LocationScreen>
   LatLng get _geofenceCenter => _locationData.geofenceCenter;
   double get _geofenceRadius => _locationData.geofenceRadius;
   bool get _isInSafeZone => _locationData.isInSafeZone;
+  bool get _isMendekati => _locationData.mendekatiGeofence;
   String get _lastUpdate => _locationData.lastUpdate;
+
+  // ── Warna & label 3-level geofence: aman / mendekati / di luar ───────────
+  Color get _geofenceColor {
+    if (!_isInSafeZone) return _C.bahayaText;
+    if (_isMendekati) return _C.waspadaText;
+    return _C.amanText;
+  }
+
+  Color get _geofenceBgColor {
+    if (!_isInSafeZone) return _C.bahayaBg;
+    if (_isMendekati) return _C.waspadaBg;
+    return _C.amanBg;
+  }
+
+  IconData get _geofenceIcon {
+    if (!_isInSafeZone) return Icons.warning_rounded;
+    if (_isMendekati) return Icons.error_outline_rounded;
+    return Icons.shield_rounded;
+  }
+
+  String get _geofenceLabel {
+    if (!_isInSafeZone) return 'Di Luar Area Aman';
+    if (_isMendekati) {
+      final sisa = _locationData.sisaJarakKeGaris.clamp(0, 999);
+      return 'Mendekati Batas — sisa ${sisa.toStringAsFixed(1)} m';
+    }
+    return 'Dalam Area Aman';
+  }
 
   // Dihitung ulang tiap rebuild (termasuk dari heartbeat timer)
   // sehingga otomatis "Terputus" saat Arduino mati
@@ -348,9 +379,6 @@ class _LocationScreenState extends State<LocationScreen>
   }
 
   // ── Map ───────────────────────────────────
-// PATCH untuk _buildMap() di location_screen.dart
-// Ganti seluruh method _buildMap() dengan ini
-
   Widget _buildMap() {
     // Pusat awal: posisi device kalau ada, fallback geofence center
     final initialCenter = _deviceLocation ?? _geofenceCenter;
@@ -369,18 +397,14 @@ class _LocationScreenState extends State<LocationScreen>
           userAgentPackageName: 'com.guardianwalk.app',
         ),
 
-        // ── Geofence circle — SATU saja, warna tergantung isInSafeZone ──
+        // ── Geofence circle — warna ikut 3 level (aman/mendekati/luar) ──
         if (_showGeofence)
           CircleLayer(circles: [
             CircleMarker(
               point            : _geofenceCenter,
               radius           : _geofenceRadius,
-              color            : _isInSafeZone
-                  ? _C.amanText.withOpacity(0.12)
-                  : _C.bahayaText.withOpacity(0.12),
-              borderColor      : _isInSafeZone
-                  ? _C.amanText.withOpacity(0.6)
-                  : _C.bahayaText.withOpacity(0.6),
+              color            : _geofenceColor.withOpacity(0.12),
+              borderColor      : _geofenceColor.withOpacity(0.6),
               borderStrokeWidth: 2,
               useRadiusInMeter : true,
             ),
@@ -397,7 +421,7 @@ class _LocationScreenState extends State<LocationScreen>
             ),
           ]),
 
-        // ── Marker pusat geofence (rumah) ──────────────────────────────
+        // ── Marker pusat geofence (rumah) — ikut 3 level ───────────────
         MarkerLayer(markers: [
           Marker(
             point : _geofenceCenter,
@@ -405,13 +429,12 @@ class _LocationScreenState extends State<LocationScreen>
             height: 36,
             child : Container(
               decoration: BoxDecoration(
-                color : _isInSafeZone ? _C.amanText : _C.bahayaText,
+                color : _geofenceColor,
                 shape : BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
                 boxShadow: [
                   BoxShadow(
-                    color     : (_isInSafeZone ? _C.amanText : _C.bahayaText)
-                        .withOpacity(0.4),
+                    color     : _geofenceColor.withOpacity(0.4),
                     blurRadius: 8,
                   ),
                 ],
@@ -441,7 +464,7 @@ class _LocationScreenState extends State<LocationScreen>
             ),
           ]),
 
-        // ── Marker lansia (dari Firebase RTD) — pulse animasi ──────────
+        // ── Marker lansia (dari Firebase RTD) — pulse animasi, 3 level ──
         // _lansiaPos diupdate tiap kali RTD push data baru dari ESP
         MarkerLayer(markers: [
           Marker(
@@ -461,7 +484,9 @@ class _LocationScreenState extends State<LocationScreen>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: _isInSafeZone
-                            ? _C.primary.withOpacity(0.18)
+                            ? (_isMendekati
+                                ? _C.waspadaText.withOpacity(0.18)
+                                : _C.primary.withOpacity(0.18))
                             : _C.bahayaText.withOpacity(0.18),
                       ),
                     ),
@@ -470,12 +495,16 @@ class _LocationScreenState extends State<LocationScreen>
                     width : 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color : _isInSafeZone ? _C.primary : _C.bahayaText,
+                      color : _isInSafeZone
+                          ? (_isMendekati ? _C.waspadaText : _C.primary)
+                          : _C.bahayaText,
                       shape : BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2.5),
                       boxShadow: [
                         BoxShadow(
-                          color: (_isInSafeZone ? _C.primary : _C.bahayaText)
+                          color: (_isInSafeZone
+                                  ? (_isMendekati ? _C.waspadaText : _C.primary)
+                                  : _C.bahayaText)
                               .withOpacity(0.4),
                           blurRadius: 8,
                         ),
@@ -532,6 +561,13 @@ class _LocationScreenState extends State<LocationScreen>
               icon: Icons.home_rounded,
               label: 'Area Aman (Geofence)',
               sub: 'Radius ${_geofenceRadius.toInt()} m',
+            ),
+            const SizedBox(height: 8),
+            _legendItem(
+              color: _C.waspadaText,
+              icon: Icons.error_outline_rounded,
+              label: 'Mendekati Batas',
+              sub: 'Sisa ≤ 2 m dari garis',
             ),
             const SizedBox(height: 8),
             _legendItem(
@@ -689,8 +725,7 @@ class _LocationScreenState extends State<LocationScreen>
             Row(
               children: [
                 Icon(Icons.location_on_rounded,
-                    size: 15,
-                    color: _isInSafeZone ? _C.primary : _C.bahayaText),
+                    size: 15, color: _geofenceColor),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -739,26 +774,24 @@ class _LocationScreenState extends State<LocationScreen>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _isInSafeZone ? _C.amanBg : _C.bahayaBg,
+                    color: _geofenceBgColor,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        _isInSafeZone
-                            ? Icons.shield_rounded
-                            : Icons.warning_rounded,
+                        _geofenceIcon,
                         size: 12,
-                        color: _isInSafeZone ? _C.amanText : _C.bahayaText,
+                        color: _geofenceColor,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _isInSafeZone ? 'Dalam Area Aman' : 'Di Luar Area Aman',
+                        _geofenceLabel,
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: _isInSafeZone ? _C.amanText : _C.bahayaText,
+                          color: _geofenceColor,
                         ),
                       ),
                     ],

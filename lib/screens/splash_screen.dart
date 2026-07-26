@@ -34,6 +34,11 @@ class _SplashScreenState extends State<SplashScreen> {
         return;
       }
 
+      if (session['is_login'] != 1) {
+        Navigator.pushReplacementNamed(context, AppRoutes.login);
+        return;
+      }
+
       final pairedWalker = await DatabaseHelper.instance.getPairedWalkers();
       print("PAIRED WALKER: $pairedWalker");
 
@@ -67,14 +72,12 @@ class _SplashScreenState extends State<SplashScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(flex: 2),
-
               SvgPicture.asset(
                 'assets/images/logo_guard.svg',
                 width: 300,
                 height: 300,
               ),
               const SizedBox(height: 32),
-
               RichText(
                 text: TextSpan(
                   children: [
@@ -100,14 +103,12 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-
               Container(
                 width: double.infinity,
                 height: 1.5,
                 color: AppColors.primary.withOpacity(0.3),
               ),
               const SizedBox(height: 13),
-
               Text(
                 'SMART ELDERY SAFETY SYSTEM',
                 style: TextStyle(
@@ -117,9 +118,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   letterSpacing: 2.0,
                 ),
               ),
-
               const Spacer(flex: 2),
-
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -152,7 +151,6 @@ class _SplashScreenState extends State<SplashScreen> {
                         ),
                 ),
               ),
-
               const SizedBox(height: 48),
             ],
           ),

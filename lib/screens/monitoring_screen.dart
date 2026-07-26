@@ -9,8 +9,6 @@ import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
 import 'widgets/location_card.dart';
 import 'widgets/status_banner.dart';
-// import '../services/notification_service.dart';
-// import 'package:firebase_database/firebase_database.dart';
 
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
@@ -21,7 +19,6 @@ class MonitoringScreen extends StatefulWidget {
 
 class _MonitoringScreenState extends State<MonitoringScreen>
     with SingleTickerProviderStateMixin {
-  // ── Data ───────────────────────────────────────────────────────────────────
   String     _namaUser   = 'User';
   String     _namaLansia = 'Nama Lansia';
   File?      _fotoFile;
@@ -30,18 +27,12 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
   StreamSubscription<WalkerData>? _walkerSub;
 
-  // NotificationService? _notifService;
-  // StreamSubscription<DatabaseEvent>? _notifSub;
-
-  // ── Animasi kedip saat bahaya ─────────────────────────────────────────────
   late AnimationController _blinkCtrl;
   late Animation<double>   _blinkAnim;
 
-  // ── Search ────────────────────────────────────────────────────────────────
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
-  // ── Events lokal ──────────────────────────────────────────────────────────
   final List<Map<String, String>> _events = [
     {
       'id':          'e1',
@@ -66,7 +57,6 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     },
   ];
 
-  // ═══════════════════════════════════════════════════════════════════════════
   @override
   void initState() {
     super.initState();
@@ -106,24 +96,16 @@ class _MonitoringScreenState extends State<MonitoringScreen>
       if (!mounted) return;
       setState(() => _walkerData = data);
     });
-
-// ── Tambahan baru: start listener notifikasi OneSignal ────
-    // _notifService = NotificationService(walkerId: walkerId);
-    // _notifSub?.cancel();
-    // _notifSub = _notifService!.listenAndPushOneSignal();
   }
 
   @override
   void dispose() {
     _walkerSub?.cancel();
-    // _notifSub?.cancel();
+    _blinkCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // GETTER
-  // ═══════════════════════════════════════════════════════════════════════════
   String get _status       => _walkerData.statusLabel;
   bool   get _jatuh        => _walkerData.jatuh;
   bool   get _mpuAktif     => _walkerData.mpuAktif;
@@ -134,23 +116,31 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   String get _geofence     => _walkerData.geofenceStatus;
   String get _lastUpdate   => _walkerData.lastUpdate;
 
-  Color get _statusColor {
+  _VisualLevel get _visualLevel {
     if (_jatuh || _walkerData.geofenceStatus == 'outside' || !_ultraBack) {
-      return AppColors.statusRed;
+      return _VisualLevel.darurat;
     }
     if (_status == 'waspada' ||
         _walkerData.mendekatiGeofence ||
         _ultraFront) {
-      return AppColors.statusYellow;
+      return _VisualLevel.waspada;
     }
-    return AppColors.statusGreen;
+    return _VisualLevel.aman;
   }
 
-    Color get _geofenceBadgeColor {
-      if (_geofence == 'outside') return AppColors.statusRed;
-      if (_walkerData.mendekatiGeofence) return AppColors.statusYellow;
-      return AppColors.statusGreen;
+  Color get _statusColor {
+    switch (_visualLevel) {
+      case _VisualLevel.darurat: return AppColors.statusRed;
+      case _VisualLevel.waspada: return AppColors.statusYellow;
+      case _VisualLevel.aman:    return AppColors.statusGreen;
     }
+  }
+
+  Color get _geofenceBadgeColor {
+    if (_geofence == 'outside') return AppColors.statusRed;
+    if (_walkerData.mendekatiGeofence) return AppColors.statusYellow;
+    return AppColors.statusGreen;
+  }
 
   String get _riskLabel {
     final r = _walkerData.fuzzyRisk;
@@ -195,21 +185,27 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   }
 
   String get _asetOrang {
-    if (_jatuh || _status == 'bahaya') return 'assets/images/org merah.png';
-    if (_status == 'waspada')          return 'assets/images/org kuning.svg';
-    return 'assets/images/org ijo.png';
+    switch (_visualLevel) {
+      case _VisualLevel.darurat: return 'assets/images/org merah.png';
+      case _VisualLevel.waspada: return 'assets/images/org kuning.svg';
+      case _VisualLevel.aman:    return 'assets/images/org ijo.png';
+    }
   }
 
   String get _asetJatuh {
-    if (_jatuh || _status == 'bahaya') return 'assets/images/jatuh merah.png';
-    if (_status == 'waspada')          return 'assets/images/jatuh kuning.png';
-    return 'assets/images/jatuh ijo.svg';
+    switch (_visualLevel) {
+      case _VisualLevel.darurat: return 'assets/images/jatuh merah.png';
+      case _VisualLevel.waspada: return 'assets/images/jatuh kuning.png';
+      case _VisualLevel.aman:    return 'assets/images/jatuh ijo.svg';
+    }
   }
 
   String get _asetGraf {
-    if (_jatuh || _status == 'bahaya') return 'assets/images/graf merah.png';
-    if (_status == 'waspada')          return 'assets/images/graf kuning.svg';
-    return 'assets/images/graf ijo.png';
+    switch (_visualLevel) {
+      case _VisualLevel.darurat: return 'assets/images/graf merah.png';
+      case _VisualLevel.waspada: return 'assets/images/graf kuning.svg';
+      case _VisualLevel.aman:    return 'assets/images/graf ijo.png';
+    }
   }
 
   Widget _buildAsset(String path, {double size = 40}) {
@@ -230,9 +226,6 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     ).toList();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -241,7 +234,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         child: Column(
           children: [
             _buildHeader(),
-            if (!_jatuh && _status == 'waspada') _buildWaspadaBanner(),
+            // ── Banner waspada dihapus — sudah ada di StatusBanner ──
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -295,25 +288,101 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // BANNER WASPADA
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildWaspadaBanner() {
+  Widget _buildHeader() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-      color: AppColors.statusYellow,
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      color: const Color(0xFFF0F4F8),
+      child: Column(
         children: [
-          const Icon(Icons.info_outline_rounded, color: Colors.white, size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '⚠️  Gerakan tidak normal terdeteksi — pantau kondisi $_namaLansia',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              CircleAvatar(
+                radius:          24,
+                backgroundColor: AppColors.primary.withOpacity(0.15),
+                backgroundImage:
+                    _fotoFile != null ? FileImage(_fotoFile!) : null,
+                child: _fotoFile == null
+                    ? Text(
+                        _namaUser.isNotEmpty ? _namaUser[0].toUpperCase() : '?',
+                        style: TextStyle(
+                            fontSize:   20,
+                            fontWeight: FontWeight.bold,
+                            color:      AppColors.primary),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Hallo, $_namaUser',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textGrey)),
+                    Text('Monitoring $_namaLansia',
+                        style: TextStyle(
+                            fontSize:   18,
+                            fontWeight: FontWeight.bold,
+                            color:      AppColors.textDark)),
+                  ],
+                ),
+              ),
+              _walkerStatusBadge(),
+              const SizedBox(width: 8),
+              Container(
+                width:  44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color:        AppColors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.notifications_outlined,
+                      color: Colors.white, size: 22),
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.notification),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height:  42,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color:        Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 6),
+                Icon(Icons.search, color: AppColors.textGrey, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged:  (v) => setState(() => _searchQuery = v),
+                    style: TextStyle(fontSize: 13, color: AppColors.textDark),
+                    decoration: InputDecoration(
+                      hintText:  'Cari kejadian, waktu, atau keterangan...',
+                      hintStyle: TextStyle(
+                          fontSize: 13, color: AppColors.textGrey),
+                      border:   InputBorder.none,
+                      isDense:  true,
+                    ),
+                  ),
+                ),
+                if (_searchQuery.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                    child: Icon(Icons.clear, color: AppColors.textGrey),
+                  ),
+              ],
             ),
           ),
         ],
@@ -321,9 +390,467 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DIALOG DETAIL JATUH
-  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _walkerStatusBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: (_walkerActive ? AppColors.statusGreen : AppColors.statusRed)
+            .withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width:  7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _walkerActive ? AppColors.statusGreen : AppColors.statusRed,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            _walkerActive ? 'Aktif' : 'Tidak Aktif',
+            style: TextStyle(
+              fontSize:   11,
+              fontWeight: FontWeight.w600,
+              color: _walkerActive ? AppColors.statusGreen : AppColors.statusRed,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAktivitas() {
+    return _buildCard(
+      child: Row(
+        children: [
+          _buildAsset(_asetOrang, size: 48),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Aktivitas',
+                    style: TextStyle(
+                        fontSize:   15,
+                        fontWeight: FontWeight.bold,
+                        color:      AppColors.textDark)),
+                Text('${_walkerData.langkah} langkah hari ini',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.textGrey)),
+              ],
+            ),
+          ),
+          _buildAsset(_asetGraf, size: 48),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResikoJatuh() {
+    final bool  isDarurat = _visualLevel == _VisualLevel.darurat;
+    final bool  isWaspada = _visualLevel == _VisualLevel.waspada;
+    final int   riskPct   = _walkerData.riskPercent;
+    final Color theme     = _statusColor;
+
+    final Color cardBg = Colors.white;
+
+    final Widget isiCard = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _buildAsset(_asetJatuh, size: 48),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Deteksi Jatuh',
+                      style: TextStyle(
+                          fontSize:   15,
+                          fontWeight: FontWeight.bold,
+                          color:      AppColors.textDark)),
+                  Text(
+                    isDarurat
+                        ? 'Jatuh Terdeteksi!'
+                        : isWaspada
+                            ? 'Perlu Diperhatikan'
+                            : 'Kondisi Aman',
+                    style: TextStyle(
+                        fontSize:   13,
+                        fontWeight: FontWeight.bold,
+                        color:      theme),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color:        theme.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$riskPct%',
+                style: TextStyle(
+                    fontSize:   18,
+                    fontWeight: FontWeight.bold,
+                    color:      theme),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Text('Tingkat Risiko Jatuh',
+                style: TextStyle(
+                    fontSize:   11,
+                    color:      AppColors.textGrey,
+                    fontWeight: FontWeight.w600)),
+            const Spacer(),
+            Text(_riskLabel,
+                style: TextStyle(
+                    fontSize:   11,
+                    color:      theme,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value:           _walkerData.fuzzyRisk.clamp(0.0, 1.0),
+            minHeight:       10,
+            backgroundColor: Colors.grey.shade200,
+            valueColor:      AlwaysStoppedAnimation<Color>(theme),
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Divider(height: 1, thickness: 0.8),
+        const SizedBox(height: 12),
+        _sensorInfoRow(
+          color:     theme,
+          icon:      Icons.vibration_rounded,
+          judul:     'Benturan yang terdeteksi',
+          deskripsi: 'Seberapa keras guncangan yang dirasakan alat',
+          nilai:     _impactLabel,
+          nilaiRaw:  '${_walkerData.fallImpact.toStringAsFixed(2)} g',
+        ),
+        const SizedBox(height: 10),
+        _sensorInfoRow(
+          color:     theme,
+          icon:      Icons.rotate_90_degrees_ccw_rounded,
+          judul:     'Kecepatan putaran tubuh',
+          deskripsi: 'Seberapa cepat gerakan berputar saat kejadian',
+          nilai:     _gyroLabel,
+          nilaiRaw:  '${_walkerData.gyroPeak.toStringAsFixed(0)} °/s',
+        ),
+        const SizedBox(height: 10),
+        _sensorInfoRow(
+          color:     theme,
+          icon:      Icons.accessibility_new_rounded,
+          judul:     'Posisi tubuh',
+          deskripsi: 'Apakah pengguna masih berdiri atau sudah rebah',
+          nilai:     _posisiLabel,
+          nilaiRaw:  'az=${_walkerData.azFiltered.toStringAsFixed(2)} g',
+        ),
+        const SizedBox(height: 10),
+        _sensorInfoRow(
+          color:     theme,
+          icon:      Icons.timer_outlined,
+          judul:     'Durasi tidak bergerak',
+          deskripsi: 'Berapa lama pengguna tidak terdeteksi bergerak',
+          nilai:     _diamLabel,
+          nilaiRaw:  '${_walkerData.diamDetik.toStringAsFixed(0)} dtk',
+        ),
+        if (isDarurat) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.statusRed.withOpacity(0.09),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.statusRed.withOpacity(0.3)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    color: AppColors.statusRed, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Sensor mendeteksi $_namaLansia kemungkinan terjatuh. '
+                    'Segera periksa kondisinya!',
+                    style: TextStyle(
+                        fontSize:   12,
+                        color:      AppColors.statusRed,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (isWaspada) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.statusYellow.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: AppColors.statusYellow.withOpacity(0.4)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    color: Colors.orange.shade700, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Terdeteksi gerakan tidak biasa dari $_namaLansia. '
+                    'Perhatikan kondisinya sebentar.',
+                    style: TextStyle(
+                        fontSize:   12,
+                        color:      Colors.orange.shade800,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+
+    return _buildCard(overrideColor: cardBg, child: isiCard);
+  }
+
+  Widget _sensorInfoRow({
+    required Color    color,
+    required IconData icon,
+    required String   judul,
+    required String   deskripsi,
+    required String   nilai,
+    required String   nilaiRaw,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width:  36,
+          height: 36,
+          decoration: BoxDecoration(
+            color:        color.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(judul,
+                  style: TextStyle(
+                      fontSize:   12,
+                      fontWeight: FontWeight.w600,
+                      color:      AppColors.textDark)),
+              Text(deskripsi,
+                  style: TextStyle(
+                      fontSize: 10, color: AppColors.textGrey)),
+              const SizedBox(height: 2),
+              Text(nilai,
+                  style: TextStyle(
+                      fontSize:   13,
+                      fontWeight: FontWeight.bold,
+                      color:      color)),
+            ],
+          ),
+        ),
+        Text(nilaiRaw,
+            style: TextStyle(
+                fontSize:   10,
+                color:      AppColors.textGrey,
+                fontFamily: 'monospace')),
+      ],
+    );
+  }
+
+  Widget _buildStatusSensor() {
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Status Sensor',
+              style: TextStyle(
+                  fontSize:   15,
+                  fontWeight: FontWeight.bold,
+                  color:      AppColors.textDark)),
+          Text('Sensor yang sedang aktif',
+              style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+          const SizedBox(height: 12),
+          _sensorItem('MPU6050 (Akselerometer)', _mpuAktif),
+          _sensorItem('GPS / Koneksi',           _gpsAktif),
+          // ── FIX: sebelumnya di sini dikirim `_ultraFront`/`_ultraBack`,
+          //    padahal dua field itu isinya status DETEKSI
+          //    (obstacle_detected / user_detected) dari Firebase, bukan
+          //    status hidup/matinya sensor. Akibatnya badge "Aktif" cuma
+          //    nyala pas ada objek/lansia yang lagi kedeteksi, dan
+          //    berubah "Tidak Aktif" begitu tidak ada yang terdeteksi —
+          //    padahal sensornya sendiri tetap menyala selama walker
+          //    aktif.
+          //    Firebase tidak mengirim field terpisah untuk status
+          //    hidup/mati hardware sensor ultrasonic ini (beda dengan
+          //    mpu_active / gps_active yang memang ada), jadi cara yang
+          //    paling masuk akal: status "Aktif" sensor ultrasonic
+          //    depan & belakang mengikuti `_walkerActive`, karena
+          //    keduanya menempel fisik di alat yang sama dan
+          //    hidup-matinya bareng. Status DETEKSI (`_ultraFront`/
+          //    `_ultraBack`) tetap dipakai apa adanya di logika
+          //    `_visualLevel` di atas — itu memang butuh nilai deteksi,
+          //    bukan status hidup/mati.
+          _sensorItem('Sensor Depan (Rintangan)', _walkerActive),
+          _sensorItem('Sensor Belakang (Lansia)', _walkerActive),
+          _sensorItem('Walker Aktif',             _walkerActive),
+          const Divider(height: 20, thickness: 0.8),
+          Row(
+            children: [
+              Icon(Icons.fence_rounded, size: 14, color: AppColors.textGrey),
+              const SizedBox(width: 6),
+              Text('Area aman: ',
+                  style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+              Text(
+                _geofence == 'inside'
+                    ? 'Di dalam area aman'
+                    : '⚠️ Di luar area!',
+                style: TextStyle(
+                    fontSize:   12,
+                    fontWeight: FontWeight.w600,
+                    color:      _geofenceBadgeColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(Icons.access_time_rounded,
+                  size: 14, color: AppColors.textGrey),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('Update terakhir: $_lastUpdate',
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.textGrey)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sensorItem(String nama, bool aktif) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width:  10,
+            height: 10,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: aktif ? AppColors.statusGreen : AppColors.statusRed,
+              boxShadow: aktif
+                  ? [BoxShadow(
+                      color:      AppColors.statusGreen.withOpacity(0.4),
+                      blurRadius: 4)]
+                  : [],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(nama, style: TextStyle(fontSize: 13, color: AppColors.textDark)),
+          const Spacer(),
+          Text(aktif ? 'Aktif' : 'Tidak Aktif',
+              style: TextStyle(
+                  fontSize:   12,
+                  fontWeight: FontWeight.w500,
+                  color: aktif ? AppColors.statusGreen : AppColors.statusRed)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard({required Widget child, Color? overrideColor}) {
+    return Container(
+      width:   double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color:        overrideColor ?? Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color:      Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset:     const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildSearchResults() {
+    final results = _filteredEvents;
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Hasil Pencarian',
+              style: TextStyle(
+                  fontSize:   15,
+                  fontWeight: FontWeight.bold,
+                  color:      AppColors.textDark)),
+          const SizedBox(height: 8),
+          if (results.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                'Tidak ada hasil untuk "$_searchQuery"',
+                style: TextStyle(color: AppColors.textGrey),
+              ),
+            )
+          else
+            ...results.map(
+              (e) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.history_rounded,
+                    color: AppColors.primary.withOpacity(0.6)),
+                title: Text(e['title'] ?? '',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                  '${e['date']} • ${e['time']}\n${e['description']}',
+                  style: TextStyle(fontSize: 11, color: AppColors.textGrey),
+                ),
+                isThreeLine: true,
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Buka: ${e['title']}')),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   void _showFallDetailDialog() {
     final int riskPct = _walkerData.riskPercent;
     showDialog(
@@ -424,596 +951,6 @@ class _MonitoringScreenState extends State<MonitoringScreen>
       ],
     );
   }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HEADER
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      color: const Color(0xFFF0F4F8),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius:          24,
-                backgroundColor: AppColors.primary.withOpacity(0.15),
-                backgroundImage:
-                    _fotoFile != null ? FileImage(_fotoFile!) : null,
-                child: _fotoFile == null
-                    ? Text(
-                        _namaUser.isNotEmpty ? _namaUser[0].toUpperCase() : '?',
-                        style: TextStyle(
-                            fontSize:   20,
-                            fontWeight: FontWeight.bold,
-                            color:      AppColors.primary),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Hallo, $_namaUser',
-                        style: TextStyle(
-                            fontSize: 12, color: AppColors.textGrey)),
-                    Text('Monitoring $_namaLansia',
-                        style: TextStyle(
-                            fontSize:   18,
-                            fontWeight: FontWeight.bold,
-                            color:      AppColors.textDark)),
-                  ],
-                ),
-              ),
-              _walkerStatusBadge(),
-              const SizedBox(width: 8),
-              Container(
-                width:  44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color:        AppColors.primary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.notifications_outlined,
-                      color: Colors.white, size: 22),
-                  onPressed: () =>
-                      Navigator.pushNamed(context, AppRoutes.notification),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            height:  42,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color:        Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Row(
-              children: [
-                const SizedBox(width: 6),
-                Icon(Icons.search, color: AppColors.textGrey, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    onChanged:  (v) => setState(() => _searchQuery = v),
-                    style: TextStyle(
-                        fontSize: 13, color: AppColors.textDark),
-                    decoration: InputDecoration(
-                      hintText:  'Cari kejadian, waktu, atau keterangan...',
-                      hintStyle: TextStyle(
-                          fontSize: 13, color: AppColors.textGrey),
-                      border:   InputBorder.none,
-                      isDense:  true,
-                    ),
-                  ),
-                ),
-                if (_searchQuery.isNotEmpty)
-                  GestureDetector(
-                    onTap: () {
-                      _searchCtrl.clear();
-                      setState(() => _searchQuery = '');
-                    },
-                    child: Icon(Icons.clear, color: AppColors.textGrey),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _walkerStatusBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: (_walkerActive ? AppColors.statusGreen : AppColors.statusRed)
-            .withOpacity(0.12),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width:  7,
-            height: 7,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color:
-                  _walkerActive ? AppColors.statusGreen : AppColors.statusRed,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            _walkerActive ? 'Aktif' : 'Offline',
-            style: TextStyle(
-              fontSize:   11,
-              fontWeight: FontWeight.w600,
-              color:
-                  _walkerActive ? AppColors.statusGreen : AppColors.statusRed,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // AKTIVITAS
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildAktivitas() {
-    return _buildCard(
-      child: Row(
-        children: [
-          _buildAsset(_asetOrang, size: 48),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Aktivitas',
-                    style: TextStyle(
-                        fontSize:   15,
-                        fontWeight: FontWeight.bold,
-                        color:      AppColors.textDark)),
-                Text('${_walkerData.langkah} langkah hari ini',
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.textGrey)),
-              ],
-            ),
-          ),
-          _buildAsset(_asetGraf, size: 48),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RESIKO JATUH — card putih, kedip merah-putih saat bahaya
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildResikoJatuh() {
-    final bool  isBahaya  = _jatuh || _status == 'bahaya';
-    final bool  isWaspada = !isBahaya && _status == 'waspada';
-    final int   riskPct   = _walkerData.riskPercent;
-    final Color theme     = _statusColor;
-
-    final Color cardBg = isWaspada
-        ? AppColors.statusYellow.withOpacity(0.06)
-        : Colors.white;
-
-    // ── Isi card (dipisah agar bisa dipakai oleh AnimatedBuilder) ────────────
-    final Widget isiCard = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-
-        // Header
-        Row(
-          children: [
-            _buildAsset(_asetJatuh, size: 48),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Deteksi Jatuh',
-                      style: TextStyle(
-                          fontSize:   15,
-                          fontWeight: FontWeight.bold,
-                          color:      AppColors.textDark)),
-                  Text(
-                    isBahaya
-                        ? '🚨 Jatuh Terdeteksi!'
-                        : isWaspada
-                            ? '⚠️ Perlu Diperhatikan'
-                            : '✅ Kondisi Aman',
-                    style: TextStyle(
-                        fontSize:   13,
-                        fontWeight: FontWeight.bold,
-                        color:      theme),
-                  ),
-                ],
-              ),
-            ),
-            // Badge %
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color:        theme.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '$riskPct%',
-                style: TextStyle(
-                    fontSize:   18,
-                    fontWeight: FontWeight.bold,
-                    color:      theme),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 12),
-
-        // Progress bar
-        Row(
-          children: [
-            Text('Tingkat Risiko Jatuh',
-                style: TextStyle(
-                    fontSize:   11,
-                    color:      AppColors.textGrey,
-                    fontWeight: FontWeight.w600)),
-            const Spacer(),
-            Text(_riskLabel,
-                style: TextStyle(
-                    fontSize:   11,
-                    color:      theme,
-                    fontWeight: FontWeight.w600)),
-          ],
-        ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value:           _walkerData.fuzzyRisk.clamp(0.0, 1.0),
-            minHeight:       10,
-            backgroundColor: Colors.grey.shade200,
-            valueColor:      AlwaysStoppedAnimation<Color>(theme),
-          ),
-        ),
-
-        const SizedBox(height: 14),
-        const Divider(height: 1, thickness: 0.8),
-        const SizedBox(height: 12),
-
-        // 4 indikator sensor
-        _sensorInfoRow(
-          color:     theme,
-          icon:      Icons.vibration_rounded,
-          judul:     'Benturan yang terdeteksi',
-          deskripsi: 'Seberapa keras guncangan yang dirasakan alat',
-          nilai:     _impactLabel,
-          nilaiRaw:  '${_walkerData.fallImpact.toStringAsFixed(2)} g',
-        ),
-        const SizedBox(height: 10),
-        _sensorInfoRow(
-          color:     theme,
-          icon:      Icons.rotate_90_degrees_ccw_rounded,
-          judul:     'Kecepatan putaran tubuh',
-          deskripsi: 'Seberapa cepat gerakan berputar saat kejadian',
-          nilai:     _gyroLabel,
-          nilaiRaw:  '${_walkerData.gyroPeak.toStringAsFixed(0)} °/s',
-        ),
-        const SizedBox(height: 10),
-        _sensorInfoRow(
-          color:     theme,
-          icon:      Icons.accessibility_new_rounded,
-          judul:     'Posisi tubuh',
-          deskripsi: 'Apakah pengguna masih berdiri atau sudah rebah',
-          nilai:     _posisiLabel,
-          nilaiRaw:  'az=${_walkerData.azFiltered.toStringAsFixed(2)} g',
-        ),
-        const SizedBox(height: 10),
-        _sensorInfoRow(
-          color:     theme,
-          icon:      Icons.timer_outlined,
-          judul:     'Durasi tidak bergerak',
-          deskripsi: 'Berapa lama pengguna tidak terdeteksi bergerak',
-          nilai:     _diamLabel,
-          nilaiRaw:  '${_walkerData.diamDetik.toStringAsFixed(0)} dtk',
-        ),
-
-        // Kotak peringatan BAHAYA
-        if (isBahaya) ...[
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.statusRed.withOpacity(0.09),
-              borderRadius: BorderRadius.circular(10),
-              border:
-                  Border.all(color: AppColors.statusRed.withOpacity(0.3)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_rounded,
-                    color: AppColors.statusRed, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Sensor mendeteksi $_namaLansia kemungkinan terjatuh. '
-                    'Segera periksa kondisinya!',
-                    style: TextStyle(
-                        fontSize:   12,
-                        color:      AppColors.statusRed,
-                        fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-
-        // Kotak info WASPADA
-        if (isWaspada) ...[
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.statusYellow.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: AppColors.statusYellow.withOpacity(0.4)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.info_outline_rounded,
-                    color: Colors.orange.shade700, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Terdeteksi gerakan tidak biasa dari $_namaLansia. '
-                    'Perhatikan kondisinya sebentar.',
-                    style: TextStyle(
-                        fontSize:   12,
-                        color:      Colors.orange.shade800,
-                        fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-
-    // Saat BAHAYA: card kedip putih ↔ merah muda
-
-    // Normal / waspada
-    return _buildCard(overrideColor: cardBg, child: isiCard);
-  }
-
-  // ── Helper baris info sensor ──────────────────────────────────────────────
-  Widget _sensorInfoRow({
-    required Color    color,
-    required IconData icon,
-    required String   judul,
-    required String   deskripsi,
-    required String   nilai,
-    required String   nilaiRaw,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width:  36,
-          height: 36,
-          decoration: BoxDecoration(
-            color:        color.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: color, size: 18),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(judul,
-                  style: TextStyle(
-                      fontSize:   12,
-                      fontWeight: FontWeight.w600,
-                      color:      AppColors.textDark)),
-              Text(deskripsi,
-                  style: TextStyle(
-                      fontSize: 10, color: AppColors.textGrey)),
-              const SizedBox(height: 2),
-              Text(nilai,
-                  style: TextStyle(
-                      fontSize:   13,
-                      fontWeight: FontWeight.bold,
-                      color:      color)),
-            ],
-          ),
-        ),
-        Text(nilaiRaw,
-            style: TextStyle(
-                fontSize:   10,
-                color:      AppColors.textGrey,
-                fontFamily: 'monospace')),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // STATUS SENSOR
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildStatusSensor() {
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Status Sensor',
-              style: TextStyle(
-                  fontSize:   15,
-                  fontWeight: FontWeight.bold,
-                  color:      AppColors.textDark)),
-          Text('Sensor yang sedang aktif',
-              style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-          const SizedBox(height: 12),
-          _sensorItem('MPU6050 (Akselerometer)', _mpuAktif),
-          _sensorItem('GPS / Koneksi',           _gpsAktif),
-          _sensorItem('Sensor Depan (Rintangan)', _ultraFront),
-          _sensorItem('Sensor Belakang (Lansia)', _ultraBack),
-          _sensorItem('Walker Aktif',             _walkerActive),
-          const Divider(height: 20, thickness: 0.8),
-          Row(
-            children: [
-              Icon(Icons.fence_rounded, size: 14, color: AppColors.textGrey),
-              const SizedBox(width: 6),
-              Text('Area aman: ',
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.textGrey)),
-              Text(
-                _geofence == 'inside'
-                    ? 'Di dalam area aman'
-                    : '⚠️ Di luar area!',
-                style: TextStyle(
-                    fontSize:   12,
-                    fontWeight: FontWeight.w600,
-                    color:      _geofenceBadgeColor),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(Icons.access_time_rounded,
-                  size: 14, color: AppColors.textGrey),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text('Update terakhir: $_lastUpdate',
-                    style: TextStyle(
-                        fontSize: 11, color: AppColors.textGrey)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sensorItem(String nama, bool aktif) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width:  10,
-            height: 10,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: aktif ? AppColors.statusGreen : AppColors.statusRed,
-              boxShadow: aktif
-                  ? [
-                      BoxShadow(
-                          color:      AppColors.statusGreen.withOpacity(0.4),
-                          blurRadius: 4)
-                    ]
-                  : [],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(nama, style: TextStyle(fontSize: 13, color: AppColors.textDark)),
-          const Spacer(),
-          Text(aktif ? 'Aktif' : 'Tidak Aktif',
-              style: TextStyle(
-                  fontSize:   12,
-                  fontWeight: FontWeight.w500,
-                  color: aktif
-                      ? AppColors.statusGreen
-                      : AppColors.statusRed)),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CARD WRAPPER
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildCard({required Widget child, Color? overrideColor}) {
-    return Container(
-      width:   double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color:        overrideColor ?? Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color:      Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset:     const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SEARCH RESULTS
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildSearchResults() {
-    final results = _filteredEvents;
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Hasil Pencarian',
-              style: TextStyle(
-                  fontSize:   15,
-                  fontWeight: FontWeight.bold,
-                  color:      AppColors.textDark)),
-          const SizedBox(height: 8),
-          if (results.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                'Tidak ada hasil untuk "$_searchQuery"',
-                style: TextStyle(color: AppColors.textGrey),
-              ),
-            )
-          else
-            ...results.map(
-              (e) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.history_rounded,
-                    color: AppColors.primary.withOpacity(0.6)),
-                title: Text(e['title'] ?? '',
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                  '${e['date']} • ${e['time']}\n${e['description']}',
-                  style: TextStyle(fontSize: 11, color: AppColors.textGrey),
-                ),
-                isThreeLine: true,
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Buka: ${e['title']}')),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }
+
+enum _VisualLevel { aman, waspada, darurat }

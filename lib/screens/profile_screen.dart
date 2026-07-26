@@ -55,7 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ── DATA DEVICE WALKER ──
   String _walkerId = '-';
-  String _statusDevice = 'Belum Terhubung';
+  String _statusDevice = 'Tidak Aktif';
   // final int _battery = 89;
   StreamSubscription<DatabaseEvent>? _walkerSub;
   StreamSubscription<DatabaseEvent>? _firebaseConnectedSub;
@@ -102,7 +102,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _walkerId = resolvedWalkerId;
       } else {
         _walkerId = '-';
-        _statusDevice = 'Belum Terhubung';
+        _statusDevice = 'Tidak Aktif';
         _gps = false;
         _gsm = false;
         _totalMonitoring = 0;
@@ -189,7 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final raw = event.snapshot.value;
       if (raw is! Map) {
         setState(() {
-          _statusDevice = 'Offline';
+          _statusDevice = 'Tidak Aktif';
           _gps = false;
           _gsm = false;
           _totalMonitoring = 0;
@@ -207,13 +207,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           : _asMap(sensors['sim808']);
       final history = _asMap(walker['history']);
 
-      final isConnected = status['connected'] == true ||
-          status['walker_active'] == true ||
-          walker['connected'] == true;
+      final isConnected = walker['walker_active'] == true ||
+      status.toString().toLowerCase() == 'normal' ||
+      status.toString().toLowerCase() == 'bahaya';
       final stats = _countMonitoringStats(history);
 
       setState(() {
-        _statusDevice = isConnected ? 'Connected' : 'Offline';
+        _statusDevice = isConnected ? 'Aktif' : 'Tidak Aktif';
         _gps = sim808['gps_status'] == true;
         _gsm = sim808['internet_status'] == true ||
             _toDouble(sim808['gsm_signal'], 0) > 0;
@@ -837,7 +837,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ── INFORMASI DEVICE WALKER ──────────────────────────
   Widget _buildInfoWalker() {
-    final bool isConnected = _statusDevice == 'Connected';
+    final bool isConnected = _statusDevice == 'Aktif';
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1320,8 +1320,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (!mounted) return;
 
-    Navigator.pushNamedAndRemoveUntil(
-      context,
+    // ── FIX: pakai `rootNavigator: true`. Kalau ProfileScreen ini
+    //    berada di dalam bottom navigation (MainNavigation) yang tiap
+    //    tab-nya punya Navigator sendiri-sendiri (pola umum biar state
+    //    per-tab gak reset saat pindah tab), maka
+    //    `Navigator.pushNamedAndRemoveUntil(context, ...)` tanpa
+    //    `rootNavigator: true` bisa jadi cuma menemukan & me-reset
+    //    Navigator LOKAL tab Profile — bukan Navigator utama milik
+    //    MaterialApp yang menyimpan route 'login'. Akibatnya, alih-alih
+    //    pindah ke halaman Login, tab Profile cuma balik ke rute awal
+    //    tab itu sendiri, lalu bottom nav (yang tidak ikut ter-reset)
+    //    tetap menampilkan tab Monitoring di baliknya — persis gejala
+    //    "klik keluar malah balik ke Monitoring".
+    Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
       AppRoutes.login,
       (route) => false,
     );

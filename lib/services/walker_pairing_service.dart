@@ -1,5 +1,6 @@
 import 'package:firebase_database/firebase_database.dart';
 import '../database/database_helper.dart';
+import 'caregiver_sync_service.dart';   // TAMBAHAN
 
 class WalkerConnectResult {
   final bool success;
@@ -51,6 +52,11 @@ class WalkerConnectService {
           pairedDate: DateTime.now().toIso8601String(),
         );
       }
+
+      // 5. TAMBAHAN: begitu walkerId diketahui, kirim nomor kontak darurat
+      //    (yang tadi diisi user pas registrasi) ke Firebase, biar ESP32
+      //    bisa ambil buat SMS fallback.
+      await CaregiverSyncService.syncIfPossible();
 
       return WalkerConnectResult(success: true, walkerId: walkerId);
     } catch (e) {

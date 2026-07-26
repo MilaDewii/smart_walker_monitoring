@@ -582,6 +582,28 @@ CREATE TABLE cache_history(
       'cache_history',
     );
   }
+  // Ambil cache berdasarkan tipe (dipakai bareng untuk History & Notifikasi)
+  Future<List<Map<String, dynamic>>> getCacheByType(String type) async {
+    final db = await database;
+
+    return await db.query(
+      'cache_history',
+      where: 'type = ?',
+      whereArgs: [type],
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  // Hapus cache berdasarkan tipe saja (tidak menghapus tipe lain, mis. history)
+  Future<int> clearCacheByType(String type) async {
+    final db = await database;
+
+    return await db.delete(
+      'cache_history',
+      where: 'type = ?',
+      whereArgs: [type],
+    );
+  }
 
   //register user
   Future<int> registerUser({

@@ -170,6 +170,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _loadEmergencyContact();
   }
 
+  Future<void> _deleteEmergencyContact(int id) async {
+    await DatabaseHelper.instance.deleteEmergencyContact(id);
+
+    // Kalau kontak yang dihapus sedang dalam mode edit, reset state edit
+    if (_emergencyId == id) {
+      _emergencyId = null;
+      _emergencyName = '';
+      _emergencyPhone = '';
+      _emergencyRelation = '';
+    }
+
+    await _loadEmergencyContact();
+  }
+
+  void _confirmDeleteEmergencyContact(
+    BuildContext context,
+    Map<String, dynamic> contact,
+  ) {
+    final String namaKontak =
+        (contact['contact_name']?.toString().trim() ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.delete_outline, color: AppColors.statusRed),
+            const SizedBox(width: 8),
+            Text('Hapus Kontak', style: TextStyle(color: AppColors.textDark)),
+          ],
+        ),
+        content: Text(
+          namaKontak.isNotEmpty
+              ? 'Yakin ingin menghapus "$namaKontak" dari emergency contact?'
+              : 'Yakin ingin menghapus kontak ini dari emergency contact?',
+          style: TextStyle(fontSize: 13, color: AppColors.textGrey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Batal', style: TextStyle(color: AppColors.textGrey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+
+              await _deleteEmergencyContact(contact['id']);
+
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Emergency contact berhasil dihapus!'),
+                  backgroundColor: AppColors.statusRed,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusRed,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Hapus', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -194,8 +267,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 16),
                       _buildThreshold(),
                       const SizedBox(height: 16),
-                      _buildSensorCalibration(),
-                      const SizedBox(height: 16),
+                      // _buildSensorCalibration(),
+                      // const SizedBox(height: 16),
                       _buildNotification(),
                       const SizedBox(height: 16),
                       _buildPairDevice(),
@@ -425,200 +498,200 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── 3. SENSOR CALIBRATION ────────────────────────────
-  Widget _buildSensorCalibration() {
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionTitle('Sensor Calibration', Icons.settings_input_antenna,
-              AppColors.primary),
-          const SizedBox(height: 4),
-          Text('Kalibrasi sensor sebelum digunakan',
-              style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-          const SizedBox(height: 16),
-          _buildCalibItem(
-            name: 'MPU6050',
-            subtitle: 'Akselerometer & Giroskop',
-            icon: Icons.sensors,
-            isDone: _calibMPU,
-            onCalibrate: () => _runCalibration('MPU6050', () {
-              setState(() {
-                _calibMPU = true;
-              });
+  // // ── 3. SENSOR CALIBRATION ────────────────────────────
+  // Widget _buildSensorCalibration() {
+  //   return _buildCard(
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         _buildSectionTitle('Sensor Calibration', Icons.settings_input_antenna,
+  //             AppColors.primary),
+  //         const SizedBox(height: 4),
+  //         Text('Kalibrasi sensor sebelum digunakan',
+  //             style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+  //         const SizedBox(height: 16),
+  //         _buildCalibItem(
+  //           name: 'MPU6050',
+  //           subtitle: 'Akselerometer & Giroskop',
+  //           icon: Icons.sensors,
+  //           isDone: _calibMPU,
+  //           onCalibrate: () => _runCalibration('MPU6050', () {
+  //             setState(() {
+  //               _calibMPU = true;
+  //             });
 
-              _saveSettings();
-            }),
-          ),
-          _buildDivider(),
-          _buildCalibItem(
-            name: 'Ultrasonic',
-            subtitle: 'Sensor Jarak',
-            icon: Icons.radar,
-            isDone: _calibUltrasonic,
-            onCalibrate: () => _runCalibration('Ultrasonic', () {
-              setState(() {
-                _calibUltrasonic = true;
-              });
-              _saveSettings();
-            }),
-          ),
-          _buildDivider(),
-          _buildCalibItem(
-            name: 'GPS',
-            subtitle: 'Lokasi & Tracking',
-            icon: Icons.gps_fixed,
-            isDone: _calibGPS,
-            onCalibrate: () => _runCalibration('GPS', () {
-              setState(() {
-                _calibGPS = true;
-              });
+  //             _saveSettings();
+  //           }),
+  //         ),
+  //         _buildDivider(),
+  //         _buildCalibItem(
+  //           name: 'Ultrasonic',
+  //           subtitle: 'Sensor Jarak',
+  //           icon: Icons.radar,
+  //           isDone: _calibUltrasonic,
+  //           onCalibrate: () => _runCalibration('Ultrasonic', () {
+  //             setState(() {
+  //               _calibUltrasonic = true;
+  //             });
+  //             _saveSettings();
+  //           }),
+  //         ),
+  //         _buildDivider(),
+  //         _buildCalibItem(
+  //           name: 'GPS',
+  //           subtitle: 'Lokasi & Tracking',
+  //           icon: Icons.gps_fixed,
+  //           isDone: _calibGPS,
+  //           onCalibrate: () => _runCalibration('GPS', () {
+  //             setState(() {
+  //               _calibGPS = true;
+  //             });
 
-              _saveSettings();
-            }),
-          ),
-          if (_calibMPU || _calibUltrasonic || _calibGPS) ...[
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: () async {
-                setState(() {
-                  _calibMPU = false;
-                  _calibUltrasonic = false;
-                  _calibGPS = false;
-                });
+  //             _saveSettings();
+  //           }),
+  //         ),
+  //         if (_calibMPU || _calibUltrasonic || _calibGPS) ...[
+  //           const SizedBox(height: 12),
+  //           GestureDetector(
+  //             onTap: () async {
+  //               setState(() {
+  //                 _calibMPU = false;
+  //                 _calibUltrasonic = false;
+  //                 _calibGPS = false;
+  //               });
 
-                await _saveSettings();
-              },
-              child: Text(
-                'Reset semua kalibrasi',
-                style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.statusRed,
-                    fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  //               await _saveSettings();
+  //             },
+  //             child: Text(
+  //               'Reset semua kalibrasi',
+  //               style: TextStyle(
+  //                   fontSize: 12,
+  //                   color: AppColors.statusRed,
+  //                   fontWeight: FontWeight.w500),
+  //             ),
+  //           ),
+  //         ],
+  //       ],
+  //     ),
+  //   );
+  // }
 
-  Widget _buildCalibItem({
-    required String name,
-    required String subtitle,
-    required IconData icon,
-    required bool isDone,
-    required VoidCallback onCalibrate,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: isDone
-                  ? AppColors.statusGreen.withOpacity(0.1)
-                  : AppColors.primary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon,
-                color: isDone ? AppColors.statusGreen : AppColors.primary,
-                size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textDark)),
-                Text(subtitle,
-                    style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
-              ],
-            ),
-          ),
-          isDone
-              ? Row(
-                  children: [
-                    Icon(Icons.check_circle,
-                        color: AppColors.statusGreen, size: 18),
-                    const SizedBox(width: 4),
-                    Text('Terkalibrasi',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.statusGreen,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                )
-              : ElevatedButton(
-                  onPressed: onCalibrate,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    elevation: 0,
-                    textStyle: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  child: const Text('Kalibrasi'),
-                ),
-        ],
-      ),
-    );
-  }
+  // Widget _buildCalibItem({
+  //   required String name,
+  //   required String subtitle,
+  //   required IconData icon,
+  //   required bool isDone,
+  //   required VoidCallback onCalibrate,
+  // }) {
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(vertical: 10),
+  //     child: Row(
+  //       children: [
+  //         Container(
+  //           width: 40,
+  //           height: 40,
+  //           decoration: BoxDecoration(
+  //             color: isDone
+  //                 ? AppColors.statusGreen.withOpacity(0.1)
+  //                 : AppColors.primary.withOpacity(0.08),
+  //             borderRadius: BorderRadius.circular(10),
+  //           ),
+  //           child: Icon(icon,
+  //               color: isDone ? AppColors.statusGreen : AppColors.primary,
+  //               size: 20),
+  //         ),
+  //         const SizedBox(width: 12),
+  //         Expanded(
+  //           child: Column(
+  //             crossAxisAlignment: CrossAxisAlignment.start,
+  //             children: [
+  //               Text(name,
+  //                   style: TextStyle(
+  //                       fontSize: 13,
+  //                       fontWeight: FontWeight.w600,
+  //                       color: AppColors.textDark)),
+  //               Text(subtitle,
+  //                   style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
+  //             ],
+  //           ),
+  //         ),
+  //         isDone
+  //             ? Row(
+  //                 children: [
+  //                   Icon(Icons.check_circle,
+  //                       color: AppColors.statusGreen, size: 18),
+  //                   const SizedBox(width: 4),
+  //                   Text('Terkalibrasi',
+  //                       style: TextStyle(
+  //                           fontSize: 11,
+  //                           color: AppColors.statusGreen,
+  //                           fontWeight: FontWeight.w600)),
+  //                 ],
+  //               )
+  //             : ElevatedButton(
+  //                 onPressed: onCalibrate,
+  //                 style: ElevatedButton.styleFrom(
+  //                   backgroundColor: AppColors.primary,
+  //                   foregroundColor: Colors.white,
+  //                   padding:
+  //                       const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+  //                   shape: RoundedRectangleBorder(
+  //                       borderRadius: BorderRadius.circular(8)),
+  //                   elevation: 0,
+  //                   textStyle: const TextStyle(
+  //                       fontSize: 12, fontWeight: FontWeight.w600),
+  //                 ),
+  //                 child: const Text('Kalibrasi'),
+  //               ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
-  void _runCalibration(String sensor, VoidCallback onDone) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        // Auto close after 2s (simulate calibration)
-        Future.delayed(const Duration(seconds: 2), () {
-          if (!mounted) return;
-          if (Navigator.canPop(context)) Navigator.pop(context);
-          onDone();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$sensor berhasil dikalibrasi!'),
-              backgroundColor: AppColors.statusGreen,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-          );
-        });
-        return AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              CircularProgressIndicator(color: AppColors.primary),
-              const SizedBox(height: 16),
-              Text('Mengkalibrasi $sensor...',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark)),
-              const SizedBox(height: 6),
-              Text('Harap jangan gerakkan perangkat',
-                  style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
+  // void _runCalibration(String sensor, VoidCallback onDone) {
+  //   showDialog(
+  //     context: context,
+  //     barrierDismissible: false,
+  //     builder: (ctx) {
+  //       // Auto close after 2s (simulate calibration)
+  //       Future.delayed(const Duration(seconds: 2), () {
+  //         if (!mounted) return;
+  //         if (Navigator.canPop(context)) Navigator.pop(context);
+  //         onDone();
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(
+  //             content: Text('$sensor berhasil dikalibrasi!'),
+  //             backgroundColor: AppColors.statusGreen,
+  //             behavior: SnackBarBehavior.floating,
+  //             shape: RoundedRectangleBorder(
+  //                 borderRadius: BorderRadius.circular(10)),
+  //           ),
+  //         );
+  //       });
+  //       return AlertDialog(
+  //         shape:
+  //             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  //         content: Column(
+  //           mainAxisSize: MainAxisSize.min,
+  //           children: [
+  //             const SizedBox(height: 8),
+  //             CircularProgressIndicator(color: AppColors.primary),
+  //             const SizedBox(height: 16),
+  //             Text('Mengkalibrasi $sensor...',
+  //                 style: TextStyle(
+  //                     fontSize: 14,
+  //                     fontWeight: FontWeight.w600,
+  //                     color: AppColors.textDark)),
+  //             const SizedBox(height: 6),
+  //             Text('Harap jangan gerakkan perangkat',
+  //                 style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+  //             const SizedBox(height: 8),
+  //           ],
+  //         ),
+  //       );
+  //     },
+  //   );
+  // }
 
   // ── 4. NOTIFICATION SOUND (TETAP AKTIF & BISA DI-SETTING) ──
   Widget _buildNotification() {
@@ -1015,6 +1088,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // LIST KONTAK
           ..._emergencyContacts.map((contact) {
+            // ── FIX ──────────────────────────────────────────────
+            // Sebelumnya kode langsung melakukan
+            // contact['contact_name'][0] tanpa mengecek apakah
+            // nama-nya kosong. Kalau ada kontak yang tersimpan
+            // dengan nama kosong (misalnya dari form yang disubmit
+            // tanpa validasi), contact_name[0] akan melempar
+            // RangeError karena string kosong tidak punya index.
+            // Sekarang semua field di-null/empty-safe.
+            final String namaKontak =
+                (contact['contact_name']?.toString().trim() ?? '');
+            final String nomorKontak =
+                (contact['contact_number']?.toString().trim() ?? '-');
+            final String hubunganKontak =
+                (contact['relationship']?.toString().trim() ?? '-');
+            final String inisial =
+                namaKontak.isNotEmpty ? namaKontak[0].toUpperCase() : '?';
+
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(14),
@@ -1028,9 +1118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Row(
                 children: [
                   CircleAvatar(
-                    child: Text(
-                      contact['contact_name'][0].toUpperCase(),
-                    ),
+                    child: Text(inisial),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1038,24 +1126,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          contact['contact_name'],
+                          namaKontak.isNotEmpty
+                              ? namaKontak
+                              : '(Tanpa nama)',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         Text(
-                          "${contact['relationship']} • ${contact['contact_number']}",
+                          "$hubunganKontak • $nomorKontak",
                         ),
                       ],
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.call),
-                    onPressed: () async {
-                      await _callEmergencyContact(
-                        contact['contact_number'],
-                      );
-                    },
+                    onPressed: nomorKontak == '-'
+                        ? null
+                        : () async {
+                            await _callEmergencyContact(
+                              contact['contact_number'],
+                            );
+                          },
                   ),
                   IconButton(
                     icon: const Icon(Icons.edit),
@@ -1064,6 +1156,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         context,
                         contact,
                       );
+                    },
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.delete_outline,
+                        color: AppColors.statusRed),
+                    tooltip: 'Hapus kontak',
+                    onPressed: () {
+                      _confirmDeleteEmergencyContact(context, contact);
                     },
                   ),
                 ],
@@ -1165,18 +1265,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () async {
+                  // ── FIX: validasi input sebelum simpan ──
+                  final nama = nameCtrl.text.trim();
+                  final phone = phoneCtrl.text.trim();
+                  final relation = relCtrl.text.trim();
+
+                  if (nama.isEmpty || phone.isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Nama dan Nomor HP wajib diisi!',
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
                   _emergencyId = contact['id'];
-
-                  _emergencyName = nameCtrl.text.trim();
-
-                  _emergencyPhone = phoneCtrl.text.trim();
-
-                  _emergencyRelation = relCtrl.text.trim();
+                  _emergencyName = nama;
+                  _emergencyPhone = phone;
+                  _emergencyRelation = relation.isEmpty ? '-' : relation;
 
                   await _saveEmergencyContact();
 
+                  if (!ctx.mounted) return;
                   Navigator.pop(ctx);
 
+                  if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: const Text(
@@ -1225,6 +1341,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.contact_phone_outlined,
+                    color: AppColors.statusRed,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Tambah Emergency Contact',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               _buildContactField(
                 nameCtrl,
                 Icons.person,
@@ -1244,19 +1378,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 "Hubungan",
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  await DatabaseHelper.instance.saveEmergencyContact(
-                    contactName: nameCtrl.text,
-                    contactNumber: phoneCtrl.text,
-                    relationship: relationCtrl.text,
-                  );
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    // ── FIX: validasi wajib isi Nama & Nomor HP ──
+                    // Ini akar masalah errornya: sebelumnya kontak
+                    // dengan nama kosong tetap disimpan ke DB, lalu
+                    // menyebabkan crash saat SettingsScreen dibuka
+                    // lagi (contact_name[0] pada string kosong).
+                    final nama = nameCtrl.text.trim();
+                    final phone = phoneCtrl.text.trim();
+                    final relation = relationCtrl.text.trim();
 
-                  await _loadEmergencyContact();
+                    if (nama.isEmpty || phone.isEmpty) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Nama dan Nomor HP wajib diisi!',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
 
-                  Navigator.pop(ctx);
-                },
-                child: const Text("Simpan"),
+                    await DatabaseHelper.instance.saveEmergencyContact(
+                      contactName: nama,
+                      contactNumber: phone,
+                      relationship: relation.isEmpty ? '-' : relation,
+                    );
+
+                    await _loadEmergencyContact();
+
+                    if (!ctx.mounted) return;
+                    Navigator.pop(ctx);
+
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'Emergency contact berhasil ditambahkan!',
+                        ),
+                        backgroundColor: AppColors.statusGreen,
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.statusRed,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text(
+                    "Simpan",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
               ),
             ],
           ),

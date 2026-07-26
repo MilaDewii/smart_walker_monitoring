@@ -101,7 +101,7 @@ class _WalkerConnectScreenState extends State<WalkerConnectScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.bluetooth_disabled,
+                    Icons.wifi_off_rounded,
                     color: Colors.red,
                     size: 50,
                   ),

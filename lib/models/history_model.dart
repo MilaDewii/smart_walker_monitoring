@@ -7,6 +7,7 @@ enum HistoryStatus { bahaya, peringatan, aman, info }
 enum HistoryCategory {
   jatuh,
   geofence,
+  geofenceMendekati, // ← BARU: mendekati batas area aman
   sensor,
   aktivitas,
   hambatanDepan,
@@ -142,13 +143,22 @@ class HistoryItem {
 
     final catStr =
         (raw['category'] ?? raw['type'] ?? '').toString().toLowerCase();
-    // Arduino tulis sensor: "HC-SR04 Belakang" atau "HC-SR04 Depan"
-    // Gunakan field sensor untuk bedakan hambatan depan vs belakang
     final sensorField = (raw['sensor'] ?? '').toString().toLowerCase();
+
     HistoryCategory category;
-    if (catStr == 'fall' || catStr.contains('jatuh')) {
+    if (catStr == 'fall' ||
+        catStr.contains('jatuh') ||
+        catStr == 'fall_detection') {
       category = HistoryCategory.jatuh;
-    } else if (catStr == 'geofence' || catStr.contains('geofence')) {
+    } else if (catStr == 'geofence_near' ||
+        catStr.contains('geofence_approaching') ||
+        catStr.contains('mendekati')) {
+      // ← deteksi string baru dari ESP32
+      category = HistoryCategory.geofenceMendekati;
+    } else if (catStr == 'geofence' ||
+        catStr.contains('geofence') ||
+        catStr == 'geofence_violated' ||
+        catStr == 'geofence_restored') {
       category = HistoryCategory.geofence;
     } else if (sensorField.contains('belakang') ||
         sensorField.contains('back') ||
@@ -156,17 +166,20 @@ class HistoryItem {
       category = HistoryCategory.hambatanBelakang;
     } else if (sensorField.contains('depan') ||
         sensorField.contains('front') ||
-        catStr.contains('depan')) {
+        catStr.contains('depan') ||
+        catStr == 'obstacle_detection') {
       category = HistoryCategory.hambatanDepan;
     } else if (catStr.contains('aktivitas')) {
       category = HistoryCategory.aktivitas;
+    } else if (catStr.contains('walker')) {
+      category = HistoryCategory.walker;
     } else {
       category = HistoryCategory.sensor;
     }
 
     final subtitle = (raw['subtitle'] ?? raw['subtittle'] ?? '').toString();
 
-    // ── distanceData — coba dari history dulu, fallback ctx ──
+    // ── distanceData ──
     final distMap = _asMap(raw['distanceData']);
     final distanceData = <DistanceDataPoint>[];
 
@@ -178,11 +191,11 @@ class HistoryItem {
           label: 'Belakang', distance: _toDouble(backVal, 0)));
     }
     if (frontVal != null) {
-      distanceData.add(
-          DistanceDataPoint(label: 'Depan', distance: _toDouble(frontVal, 0)));
+      distanceData.add(DistanceDataPoint(
+          label: 'Depan', distance: _toDouble(frontVal, 0)));
     }
 
-    // ── sensorData — fallback ke ctx (mpu6050 dari parent) ──
+    // ── sensorData ──
     final sensorMap = _asMap(raw['sensorData']);
     final ax = _toDouble(sensorMap['accel_x'] ?? raw['_ctx_accel_x'], 0);
     final ay = _toDouble(sensorMap['accel_y'] ?? raw['_ctx_accel_y'], 0);
@@ -224,7 +237,7 @@ class HistoryItem {
         : null;
     final hcsrStatus = raw['hcsrStatus']?.toString();
 
-    // Kalau lokasiJarakPusat = 0, pakai dari ctx
+    // ── lokasiJarakPusat ──
     final jarakPusatHistory = raw['lokasiJarakPusat'];
     final jarakPusatCtx = raw['_ctx_jarakDariPusat'];
     final jarakPusatRaw = (jarakPusatHistory != null &&
@@ -238,7 +251,7 @@ class HistoryItem {
             : '${_toDouble(jarakPusatRaw, 0).toStringAsFixed(1)} m')
         : null;
 
-    // ── lokasiKoordinat — cek validitas, fallback ke ctx kalau 0,0 ──
+    // ── lokasiKoordinat ──
     final rawKoord = raw['lokasiKoordinat']?.toString();
     final ctxKoord = raw['_ctx_lokasiKoordinat']?.toString();
     final lokasiKoordinat = _isValidKoord(rawKoord)
@@ -247,7 +260,7 @@ class HistoryItem {
             ? ctxKoord
             : null;
 
-    // ── kondisiGeofence — history dulu, fallback ctx ──
+    // ── kondisiGeofence ──
     final kondisiGeofence = raw['kondisiGeofence']?.toString() ??
         raw['_ctx_kondisiGeofence']?.toString() ??
         '-';
@@ -290,8 +303,7 @@ class HistoryItem {
       tindakan.addAll(sorted.map((e) => e.value.toString()));
     }
 
-    // ── statusSistem — baca dari field statusSistem di history dulu,
-// fallback ke ctx dari parent walker ──
+    // ── statusSistem ──
     final statusSistemRaw = raw['statusSistem'];
     final statusSistemMap = statusSistemRaw is Map
         ? Map<dynamic, dynamic>.from(statusSistemRaw)
@@ -304,7 +316,6 @@ class HistoryItem {
 
     final statusSistem = hasSystemData
         ? StatusSistem(
-            // Prioritas: statusSistem di history → ctx dari parent walker
             gsmConnected: statusSistemMap != null
                 ? _toBool(statusSistemMap['gsmConnected'])
                 : _toBool(raw['_ctx_gsmConnected']),
@@ -323,13 +334,29 @@ class HistoryItem {
     if (hcsrJarak != null) {
       meta['Jarak'] = '${hcsrJarak.toInt()} cm';
     }
-
     if (raw['skorAnomali'] != null) {
       meta['Anomali'] = _toDouble(raw['skorAnomali'], 0).toStringAsFixed(2);
     }
-
-    if (raw['lokasiNama'] != null) {
-      meta['Lokasi'] = raw['lokasiNama'].toString();
+    // FIX: jangan tampilkan badge "Lokasi" di list utama kalau nilainya
+    // masih placeholder ("Unknown" dari firmware ESP32, atau kosong).
+    // Menampilkan "Unknown" apa adanya membingungkan user. Setelah history
+    // ini dibuka detailnya sekali (geocoding otomatis jalan di sana dan
+    // hasilnya ditulis balik ke Firebase), field lokasiNama di Firebase
+    // sudah berisi nama jalan asli -- baru badge ini akan muncul otomatis
+    // di kunjungan berikutnya.
+    final rawLokasiNama = raw['lokasiNama']?.toString();
+    final isLokasiNamaValid = rawLokasiNama != null &&
+        rawLokasiNama.isNotEmpty &&
+        rawLokasiNama != 'Unknown' &&
+        rawLokasiNama != 'Koordinat GPS';
+    if (isLokasiNamaValid) {
+      meta['Lokasi'] = rawLokasiNama;
+    }
+    // Untuk event geofence, tampilkan jarak dari pusat di meta
+    if ((category == HistoryCategory.geofence ||
+            category == HistoryCategory.geofenceMendekati) &&
+        lokasiJarakPusat != null) {
+      meta['Jarak Pusat'] = lokasiJarakPusat;
     }
 
     final extra = HistoryExtra(
@@ -373,11 +400,8 @@ class HistoryItem {
     );
   }
 
-  factory HistoryItem.fromCache(
-    Map<String, dynamic> data,
-  ) {
+  factory HistoryItem.fromCache(Map<String, dynamic> data) {
     HistoryStatus status = HistoryStatus.info;
-
     switch ((data['status'] ?? '').toString().toLowerCase()) {
       case 'bahaya':
         status = HistoryStatus.bahaya;
@@ -391,15 +415,23 @@ class HistoryItem {
     }
 
     HistoryCategory category = HistoryCategory.sensor;
-
-    switch ((data['type'] ?? '').toString().toLowerCase()) {
+    final typeStr = (data['type'] ?? '').toString().toLowerCase();
+    switch (typeStr) {
       case 'geofence':
+      case 'geofence_violated':
+      case 'geofence_restored':
         category = HistoryCategory.geofence;
         break;
+      case 'geofence_near':
+      case 'geofence_approaching':
+        category = HistoryCategory.geofenceMendekati;
+        break;
       case 'jatuh':
+      case 'fall_detection':
         category = HistoryCategory.jatuh;
         break;
       case 'hambatan_depan':
+      case 'obstacle_detection':
         category = HistoryCategory.hambatanDepan;
         break;
       case 'hambatan_belakang':
@@ -439,45 +471,19 @@ class HistoryItem {
     return HistoryStatus.aman;
   }
 
-  static HistoryCategory _parseCategory(String s) {
-    if (s.contains('jatuh') || s == 'fall') {
-      return HistoryCategory.jatuh;
-    }
-
-    if (s.contains('geofence')) {
-      return HistoryCategory.geofence;
-    }
-
-    if (s.contains('belakang')) {
-      return HistoryCategory.hambatanBelakang;
-    }
-
-    if (s.contains('depan') || s == 'obstacle') {
-      return HistoryCategory.hambatanDepan;
-    }
-
-    if (s.contains('aktivitas')) {
-      return HistoryCategory.aktivitas;
-    }
-
-    if (s.contains('walker')) {
-      return HistoryCategory.walker;
-    }
-
-    return HistoryCategory.sensor;
-  }
-
   static IconData _iconOf(HistoryCategory cat) {
     switch (cat) {
       case HistoryCategory.jatuh:
-        return Icons
-            .accessibility_new_rounded; // sama kayak notif level darurat
+        return Icons.accessibility_new_rounded;
       case HistoryCategory.geofence:
-        return Icons.warning_amber_rounded; // sama kayak notif level tinggi
+        return Icons.warning_amber_rounded;
+      case HistoryCategory.geofenceMendekati:
+        // ← ikon khusus "mendekati": terasa berbeda dari "keluar penuh"
+        return Icons.location_searching_rounded;
       case HistoryCategory.hambatanBelakang:
-        return Icons.directions_walk_rounded; // sama kayak notif level waspada
+        return Icons.directions_walk_rounded;
       case HistoryCategory.hambatanDepan:
-        return Icons.directions_walk_rounded; // sama kayak notif level waspada
+        return Icons.directions_walk_rounded;
       case HistoryCategory.aktivitas:
         return Icons.directions_walk_rounded;
       case HistoryCategory.walker:
@@ -546,15 +552,13 @@ class HistoryItem {
   }
 
   static String _parseTime(String ts) {
-    try {
-      final dt = DateTime.parse(ts.replaceAll(' ', 'T'));
-      final h24 = dt.hour;
-      final m = dt.minute.toString().padLeft(2, '0');
-      final h12 = h24 % 12 == 0 ? 12 : h24 % 12;
-      final ampm = h24 >= 12 ? 'PM' : 'AM';
-      return '${h12.toString().padLeft(2, '0')}:$m $ampm';
-    } catch (_) {
-      return '-';
+      try {
+        final dt = DateTime.parse(ts.replaceAll(' ', 'T'));
+        final h = dt.hour.toString().padLeft(2, '0');
+        final m = dt.minute.toString().padLeft(2, '0');
+        return '$h:$m';
+      } catch (_) {
+        return '-';
+      }
     }
-  }
 }

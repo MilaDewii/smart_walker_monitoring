@@ -1,5 +1,8 @@
 // lib/services/location_service.dart
 // Fix: gunakan dart:math untuk haversine (bukan Taylor approximation)
+// Tambahan: status geofence 3 level — inside / mendekati / outside,
+// supaya UI bisa nampilin kuning saat lansia tinggal sedikit lagi
+// keluar dari area aman (bukan cuma lompat hijau -> merah).
 
 import 'package:firebase_database/firebase_database.dart';
 import 'package:latlong2/latlong.dart';
@@ -12,6 +15,11 @@ class LocationService {
   static final LocationService instance = LocationService._();
 
   bool _lastOutside = false;
+  bool _lastMendekati = false;
+
+  // Ambang batas "mendekati garis geofence" dalam meter.
+  // Ubah di sini kalau mau lebih longgar/ketat.
+  static const double _mendekatiThresholdMeter = 2.0;
 
   Stream<LocationData> watchLocation(String walkerId) {
     return FirebaseDatabase.instance
@@ -40,21 +48,33 @@ class LocationService {
     final geoLng = _toDouble(geo['center_longitude'], 0.0);
     final radius = _toDouble(geo['radius'], 100);
 
-    // ── Hitung dari Haversine ─────────────────────────────────────────────
-    final bool isInSafeZone;
-    if (lat == 0.0 && lng == 0.0) {
-      isInSafeZone = true; // GPS belum fix
-    } else if (geoLat == 0.0 && geoLng == 0.0) {
-      isInSafeZone = true; // Geofence belum diatur
-    } else {
-      isInSafeZone = _haversine(lat, lng, geoLat, geoLng) <= radius;
-    }
+    final bool   hasGps      = !(lat == 0.0 && lng == 0.0);
+    final bool   hasGeofence = !(geoLat == 0.0 && geoLng == 0.0);
 
-    final geoStatus = isInSafeZone ? 'inside' : 'outside';
+    // ── Hitung jarak dari Haversine ────────────────────────────────────────
+    final double jarakDariPusat = (!hasGps || !hasGeofence)
+        ? 0.0
+        : _haversine(lat, lng, geoLat, geoLng);
 
-    // Trigger event hanya saat baru keluar & GPS valid
-    if (!isInSafeZone && !_lastOutside && lat != 0.0 && lng != 0.0) {
+    final bool isInSafeZone = (!hasGps || !hasGeofence)
+        ? true // GPS/geofence belum siap -> anggap aman, jangan alarm palsu
+        : jarakDariPusat <= radius;
+
+    // Mendekati: masih DI DALAM area, tapi sisa jarak ke garis <= threshold
+    final double sisaJarak = radius - jarakDariPusat;
+    final bool mendekatiGeofence = hasGps &&
+        hasGeofence &&
+        isInSafeZone &&
+        sisaJarak <= _mendekatiThresholdMeter;
+
+    final String geoStatus = !isInSafeZone
+        ? 'outside'
+        : (mendekatiGeofence ? 'mendekati' : 'inside');
+
+    // ── Trigger event history hanya saat transisi (bukan tiap update) ──────
+    if (!isInSafeZone && !_lastOutside && hasGps) {
       _lastOutside = true;
+      _lastMendekati = false;
       DatabaseHelper.instance.saveCacheHistory(
         type     : 'geofence',
         title    : 'Keluar Area Aman',
@@ -64,16 +84,34 @@ class LocationService {
         longitude: lng,
       );
     }
+
+    if (isInSafeZone && mendekatiGeofence && !_lastMendekati && hasGps) {
+      _lastMendekati = true;
+      DatabaseHelper.instance.saveCacheHistory(
+        type     : 'geofence',
+        title    : 'Mendekati Batas Area Aman',
+        subtitle : 'Lansia tinggal ${sisaJarak.toStringAsFixed(1)} m dari garis geofence',
+        status   : 'waspada',
+        latitude : lat,
+        longitude: lng,
+      );
+    }
+
+    final bool keluarDariMendekati = sisaJarak > (_mendekatiThresholdMeter + 1.0);
+
     if (isInSafeZone) _lastOutside = false;
+    if (keluarDariMendekati) _lastMendekati = false;
 
     return LocationData(
-      lansiaPos      : LatLng(lat, lng),
-      geofenceCenter : LatLng(geoLat, geoLng),
-      geofenceRadius : radius,
-      geofenceStatus : geoStatus,
-      lastUpdate     : lastUpdate,
-      connected      : connected,
-      isInSafeZone   : isInSafeZone,
+      lansiaPos        : LatLng(lat, lng),
+      geofenceCenter   : LatLng(geoLat, geoLng),
+      geofenceRadius   : radius,
+      geofenceStatus   : geoStatus,
+      lastUpdate       : lastUpdate,
+      connected        : connected,
+      isInSafeZone     : isInSafeZone,
+      mendekatiGeofence: mendekatiGeofence,
+      jarakDariPusat   : jarakDariPusat,
     );
   }
 
