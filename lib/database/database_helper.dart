@@ -397,6 +397,8 @@ CREATE TABLE cache_history(
     required String pairedDate,
   }) async {
     final db = await database;
+    
+    await db.delete('paired_walker');
 
     return await db.insert(
       'paired_walker',
