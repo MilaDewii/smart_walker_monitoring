@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
+import '../database/database_helper.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +17,77 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _ingatSaya = false;
+
+  Future<void> loadRememberedEmail() async {
+    final session = await DatabaseHelper.instance.getLoginSession();
+
+    if (session != null && session['remember_me'] == 1) {
+      _emailController.text = session['email'];
+    }
+  }
+
+  Future<void> login() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email dan password wajib diisi'),
+        ),
+      );
+
+      return;
+    }
+
+    final email = _emailController.text.trim();
+
+    final emailRegex = RegExp(
+      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+    );
+
+    if (!emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Format email tidak valid'),
+        ),
+      );
+      return;
+    }
+
+    final user = await DatabaseHelper.instance.loginUser(
+      _emailController.text,
+      _passwordController.text,
+    );
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email atau password salah'),
+        ),
+      );
+      return;
+    }
+
+// simpan session login
+    await DatabaseHelper.instance.saveLoginSession(
+      userId: user['id'].toString(),
+      email: user['email'],
+      rememberMe: _ingatSaya ? 1 : 0,
+    );
+
+    final session = await DatabaseHelper.instance.getLoginSession();
+
+    print(session);
+
+    Navigator.pushReplacementNamed(
+      context,
+      AppRoutes.connectWalker,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    loadRememberedEmail();
+  }
 
   @override
   void dispose() {
@@ -37,9 +110,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Logo SVG
               SvgPicture.asset(
-                'assets/images/Guardian.svg',
-                width: 90,
-                height: 90,
+                'assets/images/logo_guard.svg',
+                width: 135,
+                height: 135,
               ),
               const SizedBox(height: 8),
 
@@ -117,6 +190,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   setState(() => _obscurePassword = !_obscurePassword);
                 },
               ),
+              const SizedBox(height: 6),
+
+              Text(
+                'Password minimal 8 karakter',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey,
+                ),
+              ),
+
               const SizedBox(height: 12),
 
               // Ingat Saya + Lupa Password
@@ -162,7 +245,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const Spacer(),
                   GestureDetector(
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ForgotPasswordScreen(),
+                        ),
+                      );
+                    },
                     child: Text(
                       'Lupa Password?',
                       style: TextStyle(
@@ -182,8 +272,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushReplacementNamed(
-                        context, AppRoutes.connectWalker);
+                    login();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -227,52 +316,52 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Tombol Google
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textDark,
-                    side:
-                        BorderSide(color: AppColors.textGrey.withOpacity(0.4)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Icon Google warna-warni
-                      RichText(
-                        text: const TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'G',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF4285F4), // biru
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'Google',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF444444),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
+              // // Tombol Google
+              // SizedBox(
+              //   width: double.infinity,
+              //   height: 52,
+              //   child: OutlinedButton(
+              //     onPressed: () {},
+              //     style: OutlinedButton.styleFrom(
+              //       foregroundColor: AppColors.textDark,
+              //       side:
+              //           BorderSide(color: AppColors.textGrey.withOpacity(0.4)),
+              //       shape: RoundedRectangleBorder(
+              //         borderRadius: BorderRadius.circular(12),
+              //       ),
+              //     ),
+              //     child: Row(
+              //       mainAxisAlignment: MainAxisAlignment.center,
+              //       children: [
+              //         // Icon Google warna-warni
+              //         RichText(
+              //           text: const TextSpan(
+              //             children: [
+              //               TextSpan(
+              //                 text: 'G',
+              //                 style: TextStyle(
+              //                   fontSize: 20,
+              //                   fontWeight: FontWeight.bold,
+              //                   color: Color(0xFF4285F4), // biru
+              //                 ),
+              //               ),
+              //             ],
+              //           ),
+              //         ),
+              //         const SizedBox(width: 10),
+              //         const Text(
+              //           'Google',
+              //           style: TextStyle(
+              //             fontSize: 15,
+              //             fontWeight: FontWeight.w500,
+              //             color: Color(0xFF444444),
+              //           ),
+              //         ),
+              //       ],
+              //     ),
+              //   ),
+              // ),
+              // const SizedBox(height: 24),
 
               // Link ke Register
               Row(

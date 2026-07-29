@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_routes.dart';
+import '../database/database_helper.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -26,6 +27,118 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nomorTelpController = TextEditingController();
   String? _jenisKelamin;
   String? _relasi;
+
+  Future<void> register() async {
+    // Validasi sederhana
+    if (_namaController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lengkapi data akun terlebih dahulu'),
+        ),
+      );
+      return;
+    }
+
+// =========================
+    // VALIDASI EMAIL
+    // =========================
+    final email = _emailController.text.trim();
+
+    final emailRegex = RegExp(
+      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+    );
+
+    if (!emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Format email tidak valid'),
+        ),
+      );
+      return;
+    }
+
+    // =========================
+    // VALIDASI PASSWORD
+    // =========================
+    final password = _passwordController.text;
+
+    final passwordRegex = RegExp(
+      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$',
+    );
+
+    if (!passwordRegex.hasMatch(password)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Password minimal 8 karakter dan harus mengandung huruf besar, huruf kecil, angka, dan simbol',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // cek email sudah ada
+    final isExist =
+        await DatabaseHelper.instance.isEmailExist(_emailController.text);
+
+    if (isExist) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email sudah terdaftar'),
+        ),
+      );
+      return;
+    }
+
+    // simpan user
+    final userId = await DatabaseHelper.instance.registerUser(
+      nama: _namaController.text,
+      email: _emailController.text,
+      password: _passwordController.text,
+      noHp: _nomorTelpController.text,
+    );
+
+    // simpan profile lansia
+    await DatabaseHelper.instance.saveProfile(
+      nama: _namaController.text,
+      email: _emailController.text,
+      noHp: _nomorTelpController.text,
+      foto: '',
+      namaLansia: _namaLansiaController.text,
+      umurLansia: int.tryParse(_umurController.text) ?? 0,
+      jenisKelaminLansia: _jenisKelamin ?? '',
+    );
+
+    // simpan kontak darurat
+    await DatabaseHelper.instance.saveEmergencyContact(
+      contactName: _namaKontakController.text,
+      contactNumber: _nomorTelpController.text,
+      relationship: _relasi ?? '',
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Registrasi berhasil'),
+      ),
+    );
+
+    // simpan session login
+    await DatabaseHelper.instance.saveLoginSession(
+        userId: userId.toString(), email: _emailController.text, rememberMe: 0);
+
+    // CEK SESSION
+    final session = await DatabaseHelper.instance.getLoginSession();
+
+    print("SESSION REGISTER:");
+    print(session);
+
+    Navigator.pushReplacementNamed(
+      context,
+      AppRoutes.connectWalker,
+    );
+  }
 
   @override
   void dispose() {
@@ -196,6 +309,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
               setState(() => _obscurePassword = !_obscurePassword);
             },
           ),
+          const SizedBox(height: 6),
+
+          Text(
+            'Minimal 8 karakter, terdiri dari huruf besar, huruf kecil, angka, dan simbol',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey,
+            ),
+          ),
           const SizedBox(height: 32),
 
           // Tombol Lanjut
@@ -324,7 +446,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 32),
 
           // Tombol Daftar
-          _buildButton('Daftar', _nextStep),
+          _buildButton('Daftar', register),
           const SizedBox(height: 12),
 
           // Teks kebijakan privasi
@@ -526,6 +648,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Expanded(
               child: Text(
                 value ?? hint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
                 style: TextStyle(
                   fontSize: 13,
                   color:

@@ -21,6 +21,14 @@ version: 1.0.0+1
 environment:
   sdk: ^3.5.3
 
+# analysis_options.yaml
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    - prefer_const_constructors
+    - prefer_final_fields
+
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
 # consider running `flutter pub upgrade --major-versions`. Alternatively,
@@ -35,17 +43,32 @@ dependencies:
   flutter_map: ^6.1.0
   latlong2: ^0.9.1
   image_picker: ^1.0.7
+  sqflite: ^2.4.1
+  path: ^1.9.0
+  url_launcher: ^6.3.0
+  geolocator: ^12.0.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   firebase_core: ^4.10.0
   firebase_database: ^12.4.2
+  shared_preferences: ^2.5.3
+  mobile_scanner: ^6.0.11
+  permission_handler: ^11.3.1
+  firebase_messaging: 16.3.0    
+  flutter_local_notifications: ^17.0.0
+  http: ^1.2.0
+  flutter_dotenv: ^6.0.1
+  connectivity_plus: ^6.0.5
+  audioplayers: ^6.0.0
+  vibration: ^3.1.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: ^0.14.3
+  flutter_lints: ^4.0.0
 
 flutter_launcher_icons:
   android: true
@@ -57,7 +80,6 @@ flutter_launcher_icons:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^4.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -78,6 +100,12 @@ flutter:
     - assets/images/peringatan ijo.svg
     - assets/images/peringatan kuning.png
     - assets/images/peringatan merah.png
+    - assets/images/guardiann.svg
+    - assets/images/logo_guardian.svg
+    - assets/images/logo_guard.svg
+    - assets/logo/logo.png
+    - .env
+    - assets/sounds/
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

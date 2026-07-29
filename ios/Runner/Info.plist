@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>App membutuhkan akses kamera untuk scan QR</string>
 	<key>CFBundleDisplayName</key>
 	<string>Smart Walker App</string>
 	<key>CFBundleExecutable</key>
